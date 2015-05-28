@@ -1,0 +1,19 @@
+
+
+CREATE SEQUENCE ticket_action_id_seq start 1
+    increment 1
+    NO MAXVALUE
+    CACHE 1;	
+	
+--DROP TABLE TICKET_ACTION;
+	
+CREATE TABLE TICKET_ACTION
+(
+ID						INT NOT NULL DEFAULT nextval('ticket_action_id_seq'),
+NAME					VARCHAR(60),
+CATEGORY				VARCHAR(60),
+DESCRIPTION				VARCHAR(60),
+WIKI_LINK				VARCHAR(60),
+NOTES					VARCHAR(255)
+);
+ALTER SEQUENCE ticket_action_id_seq OWNED BY TICKET_ACTION.ID;

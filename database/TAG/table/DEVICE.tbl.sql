@@ -1,0 +1,18 @@
+
+CREATE SEQUENCE device_id_seq start 1
+    increment 1
+    NO MAXVALUE
+    CACHE 1;	
+	
+--DROP TABLE DEVICE;
+	
+CREATE TABLE DEVICE
+(
+ID						INT NOT NULL DEFAULT nextval('device_id_seq'),
+MANUFACTURER			VARCHAR(120),
+MODEL					VARCHAR(120),
+OS 						VARCHAR(120),
+BROWSER					VARCHAR(120),
+NOTES					VARCHAR(255)	
+);	
+ALTER SEQUENCE device_id_seq OWNED BY DEVICE.ID;
