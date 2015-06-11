@@ -1,2 +1,0 @@
-
-DROP TABLE TAG_USER;
