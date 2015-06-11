@@ -33,20 +33,13 @@ class Application extends Controller {
         jsonBuffer += json
       }
     } finally {
+      rs.close()
+      stmt.close()
       conn.close()
     }
     val j = JsArray(jsonBuffer)
-    //val j = Json.arr(jsonBuffer.map(x => x: JsValueWrapper): _*)
     Ok(j)
   }
-
-
-  def addAgent() = Action {
-
-
-    Ok
-  }
-
 
   def validateAgent() = Action {
     /*
@@ -66,6 +59,14 @@ class Application extends Controller {
 
     Ok
   }
+
+  def addAgent() = Action {
+
+
+    Ok
+  }
+
+
 
 
   //TODO we want to take some parameters for this call
@@ -103,10 +104,124 @@ class Application extends Controller {
       conn.close()
     }
     val j = JsArray(jsonBuffer)
-
     Ok(j)
-
   }
+
+  def findAccount = Action {
+    /*
+        Return a list with some account details + account id based on some search criteria such
+        as last name.
+     */
+    Ok
+  }
+
+  def getAccount = Action {
+    /*
+    //use account id, phone number, or device id to uniquely identify an account
+
+    var jsonBuffer = ArrayBuffer.empty[JsValue]
+    val conn = DB.getConnection()
+
+    try {
+      val stmt = conn.createStatement
+      val rs = stmt.executeQuery("SELECT * from ACCOUNT")
+      while (rs.next()) {
+        val json: JsValue = Json.obj(
+
+        )
+        jsonBuffer += json
+      }
+    } finally {
+      conn.close()
+    }
+    val j = JsArray(jsonBuffer)
+    Ok(j)
+  }
+  */
+    Ok
+  }
+
+  def getTicketTypes = Action {
+    var jsonBuffer = ArrayBuffer.empty[JsValue]
+    var conn = DB.getConnection()
+    try{
+      val stmt = conn.prepareStatement("SELECT id, name, category, description, wiki_link, notes from TICKET_ACTION")
+      val rs = stmt.executeQuery()
+      while(rs.next()){
+          val json: JsValue = Json.obj(
+            "id" -> rs.getInt("id"),
+            "Name" -> rs.getString("name"),
+            "Category" -> rs.getString("category"),
+            "Description" -> rs.getString("description"),
+            "Wiki" -> rs.getString("wiki_link"),
+            "Notes" -> rs.getString("notes")
+          )
+        jsonBuffer += json
+      }
+
+    }finally{
+      rs.close()
+      stmt.close()
+      conn.close()
+    }
+
+    val j = jsArray(jsonBuffer)
+    Ok(j)
+  }
+
+  def getTicketStatusTypes = Action {
+    var jsonBuffer = ArrayBuffer.empty[JsValue]
+    var conn = DB.getConnection()
+    try{
+      val stmt = conn.prepareStatement("SELECT id, status, description from TICKET_STATUS")
+      val rs = stmt.executeQuery()
+      while(rs.next()){
+        val json: JsValue = Json.obj(
+          "id" -> rs.getInt("id"),
+          "Status" -> rs.getString("status"),
+          "Description" -> rs.getString("description")
+        )
+        jsonBuffer += json
+      }
+
+    }finally{
+      rs.close()
+      stmt.close()
+      conn.close()
+    }
+
+    val j = jsArray(jsonBuffer)
+    Ok(j)
+  }
+
+  def createTicket = Action {
+
+    Ok
+  }
+
+  def updateTicket = Action {
+
+    Ok
+  }
+
+  def createAccount = Action {
+
+    Ok
+  }
+
+  def updateAccount = Action {
+    /*
+	- account details
+	- new person / update / remove person
+	- new device / remove device
+	- new filter / remove filter
+
+     */
+
+
+    Ok
+  }
+
 
 
 }
