@@ -32,9 +32,9 @@ class Application extends Controller {
         )
         jsonBuffer += json
       }
-    } finally {
       rs.close()
       stmt.close()
+    } finally {
       conn.close()
     }
     val j = JsArray(jsonBuffer)
@@ -158,14 +158,14 @@ class Application extends Controller {
           )
         jsonBuffer += json
       }
-
-    }finally{
       rs.close()
       stmt.close()
+    }finally{
+
       conn.close()
     }
 
-    val j = jsArray(jsonBuffer)
+    val j = JsArray(jsonBuffer)
     Ok(j)
   }
 
@@ -183,14 +183,14 @@ class Application extends Controller {
         )
         jsonBuffer += json
       }
-
-    }finally{
       rs.close()
       stmt.close()
+    }finally{
+
       conn.close()
     }
 
-    val j = jsArray(jsonBuffer)
+    val j = JsArray(jsonBuffer)
     Ok(j)
   }
 
