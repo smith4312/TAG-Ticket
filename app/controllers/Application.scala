@@ -43,16 +43,9 @@ class Application extends Controller {
   }
 
 
-  def validateAgent() = Action {
+  def validateAgent() = TODO
 
-    Ok
-  }
-
-
-  def addAgent() = Action {
-
-    Ok
-  }
+  def addAgent() = TODO
 
 
   //TODO we want to take some parameters for this call
@@ -94,16 +87,8 @@ class Application extends Controller {
   }
 
 
-  def findAccount = Action {
-
-    Ok
-  }
-
-
-  def getAccount = Action {
-
-    Ok
-  }
+  def findAccount = TODO
+  def getAccount = TODO
 
 
   def getTicketTypes = Action {
@@ -161,34 +146,22 @@ class Application extends Controller {
   }
 
 
-  def createTicket = Action {
-
-    Ok
-  }
+  def createTicket = TODO
 
 
-  def updateTicket = Action {
-
-    Ok
-  }
+  def updateTicket = TODO
 
 
-  def createAccount = Action {
-
-    Ok
-  }
+  def createAccount = TODO
 
 
-  def updateAccount = Action {
-    /*
+   /*
 	- account details
 	- new person / update / remove person
 	- new device / remove device
 	- new filter / remove filter
      */
-    Ok
-  }
+	 def updateAccount = TODO
 }
-
 
 //def is function action is request response function,ok means 200

@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
  *
  *		addAgent: Add New Function for TAG AGENT
  *
@@ -35,16 +35,9 @@ CREATE OR REPLACE FUNCTION addAgent(	first_name varchar(30),
 					notes varchar(255),
 					office_location_id integer ) RETURNS text AS $$
 BEGIN
-	--Can't create a duplicate	
-	IF userName = '' THEN
-		RETURN 'User name must be at least 4 characters';
-	ELSIF EXISTS( SELECT 1 FROM AGENT WHERE user_name = userName) THEN
-		RETURN 'User Name Already Exists';
-	ELSE 
 	INSERT INTO AGENT VALUES (DEFAULT, first_name, last_name , userName, password, 
 			address, city, state_cd, zip, country, email, phone, mobile_phone, notes, office_location_id);
 	RETURN 'Success';
-	END IF;
 END;
 $$ LANGUAGE plpgsql;		
 
