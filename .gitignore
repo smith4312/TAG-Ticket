@@ -5,4 +5,5 @@ target
 /.classpath
 /.project
 /.settings
+conf/application.conf
 /RUNNING_PID
