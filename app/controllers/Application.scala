@@ -1,5 +1,7 @@
 package controllers
 
+import java.sql.ResultSet
+
 import play.api.Play.current
 import play.api._
 import play.api.libs.json.Json.JsValueWrapper
@@ -10,27 +12,21 @@ import play.api.libs.json._
 
 import scala.collection.mutable.ArrayBuffer
 
+
 class Application extends Controller {
 
   def index = Action {
     Ok
   }
 
-
-  def listAgents = Action {
+  def queryToJson(query: String, rsToJsRow: ResultSet => JsValue): JsArray = {
     var jsonBuffer = ArrayBuffer.empty[JsValue]
     val conn = DB.getConnection()
     try {
       val stmt = conn.createStatement
-      val rs = stmt.executeQuery("SELECT id, first_name, last_name, user_name from AGENT")
+      val rs = stmt.executeQuery(query)
       while (rs.next()) {
-        val json: JsValue = Json.obj(
-          "id" -> rs.getInt("ID"),
-          "firstName" -> rs.getString("first_name"),
-          "lastName" -> rs.getString("last_name"),
-          "userName" -> rs.getString("user_name")
-        )
-        jsonBuffer += json
+        jsonBuffer += rsToJsRow(rs)
       }
       rs.close()
       stmt.close()
@@ -38,8 +34,20 @@ class Application extends Controller {
     finally {
       conn.close()
     }
-    val j = JsArray(jsonBuffer)
-    Ok(j)
+    JsArray(jsonBuffer)
+  }
+
+  def listAgents = Action {
+    val query = "SELECT id, first_name, last_name, user_name from AGENT"
+    val json = queryToJson(query, (rs: ResultSet) =>
+      Json.obj(
+        "id" -> rs.getInt("ID"),
+        "firstName" -> rs.getString("first_name"),
+        "lastName" -> rs.getString("last_name"),
+        "userName" -> rs.getString("user_name")
+      )
+    )
+    Ok(json)
   }
 
 
