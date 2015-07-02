@@ -1,13 +1,11 @@
 package controllers
 
 import java.sql.ResultSet
-
 import play.api.Play.current
 import play.api._
 import play.api.libs.json.Json.JsValueWrapper
 import play.api.mvc._
 import play.api.db._
-import play.twirl.api.Html
 import play.api.libs.json._
 
 import scala.collection.mutable.ArrayBuffer
@@ -18,6 +16,7 @@ class Application extends Controller {
   def index = Action {
     Ok
   }
+
 
   def queryToJson(query: String, rsToJsRow: ResultSet => JsValue): JsArray = {
     var jsonBuffer = ArrayBuffer.empty[JsValue]
@@ -37,6 +36,7 @@ class Application extends Controller {
     JsArray(jsonBuffer)
   }
 
+
   def listAgents = Action {
     val query = "SELECT id, first_name, last_name, user_name from AGENT"
     val json = queryToJson(query, (rs: ResultSet) =>
@@ -51,117 +51,77 @@ class Application extends Controller {
   }
 
 
-  def validateAgent() = TODO
-
-  def addAgent() = TODO
-
-
   //TODO we want to take some parameters for this call
   // - Office location
   // - Agent ID for tickets assigned to that agent
   // - can these be
   def listTickets = Action {
-    var jsonBuffer = ArrayBuffer.empty[JsValue]
-    val conn = DB.getConnection()
-    try {
-      val stmt = conn.createStatement
-      val rs = stmt.executeQuery("SELECT * from V_TICKET")
-      while (rs.next()) {
-        val json: JsValue = Json.obj(
-          "ticket_id" -> rs.getInt("TICKET_ID"),
-          "version" -> rs.getInt("VERSION"),
-          "Action" -> rs.getString("ACTION"),
-          "Description" -> rs.getString("DESCRIPTION"),
-          "Status"  -> rs.getString("STATUS"),
-          "Account_id" -> rs.getInt("ACCOUNT_ID"),
-          "Person" -> rs.getInt("PERSON_ID"),
-          "First Name" -> rs.getString("FIRST_NAME"),
-          "Last Name" -> rs.getString("LAST_NAME"),
-          "Device_id" -> rs.getInt("PERSON_DEVICE_ID"),
-          "Device" -> rs.getString("DEVICE"),
-          "Office_id" -> rs.getInt("OFFICE_LOCATION_ID"),
-          "Office" -> rs.getString("LOCATION"),
-          "Created By" -> rs.getString("CREATED_BY"),
-          "Assigned To" -> rs.getString("ASSIGNED_TO"),
-          "Notes" -> rs.getString("NOTES")
-        )
-        jsonBuffer += json
-      }
-    } finally {
-      conn.close()
-    }
-    val j = JsArray(jsonBuffer)
-    Ok(j)
+    val query = "SELECT * from V_TICKET"
+    val json = queryToJson(query, (rs: ResultSet)=>
+      Json.obj(
+        "ticket_id" -> rs.getInt("TICKET_ID"),
+        "version" -> rs.getInt("VERSION"),
+        "Action" -> rs.getString("ACTION"),
+        "Description" -> rs.getString("DESCRIPTION"),
+        "Status"  -> rs.getString("STATUS"),
+        "Account_id" -> rs.getInt("ACCOUNT_ID"),
+        "Person" -> rs.getInt("PERSON_ID"),
+        "First Name" -> rs.getString("FIRST_NAME"),
+        "Last Name" -> rs.getString("LAST_NAME"),
+        "Device_id" -> rs.getInt("PERSON_DEVICE_ID"),
+        "Device" -> rs.getString("DEVICE"),
+        "Office_id" -> rs.getInt("OFFICE_LOCATION_ID"),
+        "Office" -> rs.getString("LOCATION"),
+        "Created By" -> rs.getString("CREATED_BY"),
+        "Assigned To" -> rs.getString("ASSIGNED_TO"),
+        "Notes" -> rs.getString("NOTES")
+      )
+    )
+    Ok(json)
   }
 
 
-  def findAccount = TODO
-  def getAccount = TODO
-
-
   def getTicketTypes = Action {
-    var jsonBuffer = ArrayBuffer.empty[JsValue]
-    var conn = DB.getConnection()
-    try{
-      val stmt = conn.prepareStatement("SELECT id, name, category, description, wiki_link, notes from TICKET_ACTION")
-      val rs = stmt.executeQuery()
-      while(rs.next()){
-          val json: JsValue = Json.obj(
-            "id" -> rs.getInt("id"),
-            "Name" -> rs.getString("name"),
-            "Category" -> rs.getString("category"),
-            "Description" -> rs.getString("description"),
-            "Wiki" -> rs.getString("wiki_link"),
-            "Notes" -> rs.getString("notes")
-          )
-        jsonBuffer += json
-      }
-      rs.close()
-      stmt.close()
-    }finally{
-
-      conn.close()
-    }
-
-    val j = JsArray(jsonBuffer)
-    Ok(j)
+    val query = "SELECT id, name, category, description, wiki_link, notes from TICKET_ACTION"
+    val json = queryToJson(query, (rs: ResultSet) =>
+      Json.obj(
+        "id" -> rs.getInt("id"),
+        "Name" -> rs.getString("name"),
+        "Category" -> rs.getString("category"),
+        "Description" -> rs.getString("description"),
+        "Wiki" -> rs.getString("wiki_link"),
+        "Notes" -> rs.getString("notes")
+      )
+    )
+    Ok(json)
   }
 
 
   def getTicketStatusTypes = Action {
-    var jsonBuffer = ArrayBuffer.empty[JsValue]
-    var conn = DB.getConnection()
-    try{
-      val stmt = conn.prepareStatement("SELECT id, status, description from TICKET_STATUS")
-      val rs = stmt.executeQuery()
-      while(rs.next()){
-        val json: JsValue = Json.obj(
-          "id" -> rs.getInt("id"),
-          "Status" -> rs.getString("status"),
-          "Description" -> rs.getString("description")
-        )
-        jsonBuffer += json
-      }
-      rs.close()
-      stmt.close()
-    }finally{
-
-      conn.close()
-    }
-
-    val j = JsArray(jsonBuffer)
-    Ok(j)
+    val query = "SELECT id, status, description from TICKET_STATUS"
+    val json = queryToJson(query, (rs: ResultSet) =>
+      Json.obj(
+        "id" -> rs.getInt("id"),
+        "Status" -> rs.getString("status"),
+        "Description" -> rs.getString("description")
+      )
+    )
+    Ok(json)
   }
 
+  def validateAgent() = TODO
+
+  def addAgent() = TODO
+
+  def findAccount = TODO
 
   def createTicket = TODO
 
+  def getAccount = TODO
 
   def updateTicket = TODO
 
-
   def createAccount = TODO
-
 
    /*
 	- account details
@@ -171,5 +131,3 @@ class Application extends Controller {
      */
 	 def updateAccount = TODO
 }
-
-//def is function action is request response function,ok means 200
