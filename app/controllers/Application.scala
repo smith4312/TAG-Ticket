@@ -77,6 +77,11 @@ object UserRepository {
 
 }
 
+class cookieItem{
+  var lastLogin: util.Date = new Date();
+  var token:String = null;
+}
+
 class AdminUser
 (var userName: String,
  var password: String,
@@ -84,7 +89,7 @@ class AdminUser
  var accessLevel: String) {
   var lastLogin: util.Date = new Date();
   //if expired then forward to the login page
-  var openCookies: util.HashSet[String] = new util.HashSet[String]();
+  var openCookies: util.HashMap[String,cookieItem] = new util.HashMap[String,cookieItem]();
 
   //etc.
 
@@ -102,19 +107,29 @@ class AdminUser
     var newCookieVal: String = (new util.Date()).toGMTString() + userName;
     newCookieVal = newCookieVal.replace(" ","");
     //TODO:need to encrypt it
-    openCookies.add(newCookieVal);
+    val newCookie:cookieItem = new cookieItem();
+    openCookies.put(newCookieVal,newCookie);
     return newCookieVal;
   }
 
   def checkCookie(cookieVal: String): Boolean = {
     var newDate: util.Date = new util.Date();
     if (newDate.getTime() - lastLogin.getTime() > (30 * 60 * 1000)) {
-      openCookies = new util.HashSet[String]();
-      println("Clearing Cookies");
+      openCookies = new util.HashMap[String,cookieItem]();
+     // println("Clearing Cookies");
       return false;
     }
-    if (openCookies.contains(cookieVal)) {
-      touch();
+    if (openCookies.containsKey(cookieVal)) {
+      val myCookie:cookieItem = openCookies.get(cookieVal);
+      if(newDate.getTime() - myCookie.lastLogin.getTime > (30 * 60 * 1000))
+      {
+        openCookies.remove(cookieVal);
+        return false;
+      }
+      else
+      {
+        myCookie.lastLogin = new util.Date();
+      }
       return true;
     }
     return false;
@@ -126,19 +141,19 @@ object LoggedInAction extends ActionBuilder[Request] {
     try {
       var cookieVal: String = request.cookies("userCookie").value;
       var tokens: Array[String] = cookieVal.split(":", 2);
-      println("Pre Check: "+tokens(0)+" : "+tokens(1));
+     // println("Pre Check: "+tokens(0)+" : "+tokens(1));
       if (UserRepository.isLoggedIn(tokens(0), tokens(1))) {
         block(request);
       }
       else {
-        Future.successful(Results.Redirect("http://localhost:9000/simpleLogin.html"));
+        Future.successful(Results.Redirect("http://localhost:9000/simpleLogin.html?block=notAllowed&url="+java.net.URLEncoder.encode(request.uri,"utf-8")));
       }
     }
     catch {
       case e: Exception =>
         //if can't get cookie go to login
         println("MY ERROR:  "+e.getMessage());
-        Future.successful(Results.Redirect("http://localhost:9000/simpleLogin.html"));
+        Future.successful(Results.Redirect("http://localhost:9000/simpleLogin.html?block=notAllowed&url="+java.net.URLEncoder.encode(request.uri,"utf-8")));
     }
   }
 }
