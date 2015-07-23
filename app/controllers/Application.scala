@@ -113,16 +113,13 @@ class AdminUser
 
   def checkCookie(cookieVal: String): Boolean = {
     var newDate: util.Date = new util.Date();
-    if (newDate.getTime() - lastLogin.getTime() > (30 * 60 * 1000)) {
-      openCookies = new util.HashMap[String,cookieItem]();
-     // println("Clearing Cookies");
-      return false;
-    }
+
     if (openCookies.containsKey(cookieVal)) {
       val myCookie:cookieItem = openCookies.get(cookieVal);
-      if(newDate.getTime() - myCookie.lastLogin.getTime > (30 * 60 * 1000))
+      if(newDate.getTime() - myCookie.lastLogin.getTime() > (30 * 60 * 1000))
       {
         openCookies.remove(cookieVal);
+        println("removing cookie "+cookieVal);
         return false;
       }
       else
@@ -145,14 +142,28 @@ object LoggedInAction extends ActionBuilder[Request] {
         block(request);
       }
       else {
-        Future.successful(Results.Redirect("http://localhost:9000/simpleLogin.html?block=notAllowed&url="+java.net.URLEncoder.encode(request.uri,"utf-8")));
+        if ((request.contentType+"").contains("json"))
+        {
+          Future.successful(Results.Ok("{\"action\":\"redirect\",\"location\":\"http://localhost:9000/simpleLogin.html?block=notAllowed\"}"));
+        }
+        else
+        {
+          Future.successful(Results.Redirect("http://localhost:9000/simpleLogin.html?block=notAllowed&url="+java.net.URLEncoder.encode(request.uri,"utf-8")));
+        }
       }
     }
     catch {
       case e: Exception =>
         //if can't get cookie go to login
-        println("MY ERROR:  "+e.getMessage());
-        Future.successful(Results.Redirect("http://localhost:9000/simpleLogin.html?block=notAllowed&url="+java.net.URLEncoder.encode(request.uri,"utf-8")));
+        println("MY ERROR:  "+e.getMessage()+" "+request.contentType+" "+(request.contentType+"").contains("json"));
+        if ((request.contentType+"").contains("json"))
+        {
+          Future.successful(Results.Ok("{\"action\":\"redirect\",\"location\":\"http://localhost:9000/simpleLogin.html?block=notAllowed\"}"));
+        }
+        else
+        {
+          Future.successful(Results.Redirect("http://localhost:9000/simpleLogin.html?block=notAllowed&url="+java.net.URLEncoder.encode(request.uri,"utf-8")));
+        }
     }
   }
 }
@@ -222,7 +233,7 @@ class Application extends Controller {
   }
 
 
-  def listAgents = Action {
+  def listAgents = LoggedInAction {
     val query = "SELECT id, first_name, last_name, user_name from AGENT"
     val json = queryToJson(query, (rs: ResultSet) =>
       Json.obj(
@@ -240,7 +251,7 @@ class Application extends Controller {
   // - Office location
   // - Agent ID for tickets assigned to that agent
   // - can these be
-  def listTickets = Action {
+  def listTickets = LoggedInAction {
 
     val query = "SELECT * from V_TICKET"
     val json = queryToJson(query, (rs: ResultSet)=>
