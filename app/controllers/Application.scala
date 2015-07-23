@@ -232,6 +232,23 @@ class Application extends Controller {
     JsArray(jsonBuffer)
   }
 
+  def queryToJson(query: java.sql.PreparedStatement,conn: java.sql.Connection, rsToJsRow: ResultSet => JsValue): JsArray = {
+    var jsonBuffer = ArrayBuffer.empty[JsValue];
+    try {
+      val rs = query.executeQuery();
+      while (rs.next()) {
+        jsonBuffer += rsToJsRow(rs)
+      }
+      if(!rs.isClosed()) {
+        rs.close();
+      }
+    }
+    finally {
+
+    }
+    JsArray(jsonBuffer)
+  }
+
 
   def listAgents = LoggedInAction {
     val query = "SELECT id, first_name, last_name, user_name from AGENT"
@@ -277,6 +294,47 @@ class Application extends Controller {
     Ok(json)
 
   }
+
+  def listPersonsDevices = LoggedInAction(parse.json) { request =>
+      val json = request.body;
+        val deviceID = (json \ "id").as[Int];
+    var conn = DB.getConnection();
+    var query:String = "Select filter_user_name,filter_password,p.notes as notes,provider,url,f.notes as filterNotes,device_type,manufacturer,model,os,browser,d.notes as deviceNotes  from   person_device p inner join device d on p.device_id = d.id\n   inner join filter f on p.filter_id = f.id  WHERE person_id = ?";
+    val outputJSON = try {
+      var pstmt: java.sql.PreparedStatement = conn.prepareStatement(query);
+      pstmt.setInt(1, deviceID);
+      val ret = queryToJson(pstmt, conn, (rs: ResultSet) =>
+        Json.obj(
+          "filterUsername" -> rs.getString("filter_user_name"),
+          "filterPassword" -> rs.getString("filter_password"),
+          "notes" -> rs.getString("notes"),
+          "filterProvider" -> rs.getString("provider"),
+          "filterURL" -> rs.getString("url"),
+          "filterNotes" -> rs.getString("filterNotes"),
+          "deviceType" -> rs.getString("device_type"),
+          "deviceManufacturer" -> rs.getString("manufacturer"),
+          "deviceModel" -> rs.getString("model"),
+          "os" -> rs.getString("os"),
+          "browser" -> rs.getString("browser"),
+          "deviceNotes" -> rs.getString("deviceNotes")
+        )
+      )
+      if(!pstmt.isClosed())
+      {
+        pstmt.close();
+      }
+      ret
+    }
+    finally
+    {
+      if(!conn.isClosed())
+      {
+        conn.close();
+      }
+}
+Ok(outputJSON)
+
+}
 
 
   def getTicketTypes = Action {

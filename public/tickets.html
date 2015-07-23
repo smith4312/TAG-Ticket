@@ -15,7 +15,7 @@ var to = "http://localhost:9000/tickets";
 var func = function(data)
 {
 	try{
-		console.log(JSON.stringify(data));
+	//	console.log(JSON.stringify(data));
 		if(data.action && data.action == "redirect")
 		{
 			window.location = data.location+"&url="+encodeURIComponent(window.location.pathname);
@@ -113,10 +113,56 @@ tickets.draw = function(position,viewMode,ticket)
 		}
 		span = document.createElement("span");
 		span.className = "innerTicket device "+dev;
+		span.addEventListener("click",showDevices(ticket));
 		outer.appendChild(span);
 		outer.addEventListener("click",showTicket(ticket));
 		return outer;
 		
+	}
+}
+
+function showDevices(ticket)
+{
+	return function(event)
+	{
+		event = event || window.event;
+		event.preventDefault();
+		var json = {id:ticket.Person};
+		console.log(JSON.stringify(json));
+		document.getElementById("dialogDiv").innerHTML = "Please Wait...";
+		jQuery("#dialogDiv").dialog({
+		width:650,
+		height:650
+		});
+		console.log("got here");
+		var func = function(data)
+		{
+			console.log(JSON.stringify(data));
+			var elem = document.getElementById("dialogDiv");
+			elem.innerHTML = "";
+			for(var i =0;i < data.length;i++)
+			{
+				var button = document.createElement("button");
+				button.innerHTML = data[i].deviceType+" "+data[i].deviceModel;
+				button.addEventListener("click",deviceButtonClick(data[i]));
+				elem.appendChild(button);
+			}
+			var div = document.createElement("div");
+			div.id = "deviceDetails";
+			elem.appendChild(div);
+		}
+		var to = "http://localhost:9000/getPersonalDevices";
+		runJSONAjax(to,json,func);
+	}
+}
+
+function deviceButtonClick(device)
+{
+	return function()
+	{
+		var form = new formBuilder(device);
+		document.getElementById("deviceDetails").innerHTML = "";
+		form.createForm("deviceDetails");
 	}
 }
 
@@ -161,13 +207,38 @@ ticketTest();
 	width:4%;
 	text-align:center;
 }
-#dialogDiv > label
+#dialogDiv > label,#deviceDetails > label
 {
-	width:25%;
+	width:29%;
 }
-#dialogDiv > input
+#dialogDiv > input, #deviceDetails > input
 {
-	width:74%;
+	width:70%;
+}
+#deviceDetails
+{
+padding:10px;
+}
+.outerTableLayer
+{
+	min-height:300px;
+}
+.paginator
+{
+	margin:0px 100px;;
+}
+.paginatorPage
+{
+	padding:5px;
+	font-size:1.5em;
+	font-weight:bold;
+	margin:10px;
+	border:1px solid slategrey;
+}
+.paginatorPage:hover
+{
+	color:white;
+	background-color:black;
 }
 </style>
 </head>
