@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="http://code.jquery.com/jquery-latest.min.js"></script>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+		<!-- Optional theme -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap-theme.min.css">
+<script src="http://admin.usanativ.com:8080/webservices2/webresources/portal/a/js/genericTables2.js"></script>
+<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>
+<link rel="stylesheet" type="text/css" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css">
+<script>
+function ticketTest(){
+
+var to = "http://localhost:9000/tickets";
+var func = function(data)
+{
+	try{
+		console.log(JSON.stringify(data));
+		if(data.action && data.action == "redirect")
+		{
+			window.location = data.location+"&url="+encodeURIComponent(window.location.pathname);
+		}
+		ticketTable = new genericTable(data,tickets);
+		ticketTable.displayTable("table","table",ticketTable,null,function(){justifyTable("outerSublinkWrapper");});
+
+	}
+	catch(e)
+	{
+		document.body.innerHTML = data;
+	}
+}
+
+	runGETJSON(to,func);
+}
+
+function runGETJSON(to,func)
+{
+$.ajax
+	({
+	type:"GET",
+	cache:false,
+	url:to,
+	success:func,
+	contentType: "application/json",
+	dataType: "json"
+	});
+}
+
+var ticketTable;
+var tickets = new elementItem();
+tickets.draw = function(position,viewMode,ticket)
+{
+	if(ticket == null)
+	{
+		ticket = this.viewJSON[position];
+	}
+	if(viewMode == "table")
+	{
+		var outer = document.createElement("div");
+		outer.className = "ticketOuter";
+		var span = document.createElement("span");
+		span.className = "innerTicket id";
+		span.innerHTML = ticket["ticket_id"];
+		outer.appendChild(span);
+		span = document.createElement("span");
+		span.className = "innerTicket custName";
+		span.innerHTML = ticket["Last Name"]+", "+ticket["First Name"];
+		outer.appendChild(span);
+		span = document.createElement("span");
+		span.className = "innerTicket description";
+		span.innerHTML = ticket["Description"];
+		outer.appendChild(span);
+		span = document.createElement("span");
+		span.className = "innerTicket action";
+		span.innerHTML = ticket["Action"];
+		outer.appendChild(span);
+		span = document.createElement("span");
+		span.className = "innerTicket assignment";
+		span.innerHTML = ticket["Assigned To"];
+		outer.appendChild(span);
+		span = document.createElement("span");
+		var stat = "glyphicon glyphicon-folder-open";
+		if(ticket["Status"].toLowerCase().indexOf("open") >= 0)
+		{
+			stat = "glyphicon glyphicon-pencil";
+		}
+		if(ticket["Status"].toLowerCase().indexOf("closed") >= 0)
+		{
+			stat = "glyphicon glyphicon-ok-sign";
+		}
+		if(ticket["Status"].toLowerCase().indexOf("cancel") >= 0)
+		{
+			stat = "glyphicon glyphicon-trash";
+		}
+		if(ticket["Status"].toLowerCase().indexOf("drop") >= 0)
+		{
+			stat = "glyphicon glyphicon-circle-arrow-down";
+		}
+		if(ticket["Status"].toLowerCase().indexOf("pick") >= 0)
+		{
+			stat = "glyphicon glyphicon-thumbs-up";
+		}
+		if(ticket["Status"].toLowerCase().indexOf("hold") >= 0)
+		{
+			stat = "glyphicon glyphicon-lock";
+		}
+		span.className = "innerTicket status "+ticket["Status"]+" "+stat;
+		outer.appendChild(span);
+		var dev = "glyphicon glyphicon-floppy-disk";
+		if(ticket["Device"].toLowerCase().indexOf("phone") >= 0)
+		{
+			dev ="glyphicon glyphicon-phone";
+		}
+		span = document.createElement("span");
+		span.className = "innerTicket device "+dev;
+		outer.appendChild(span);
+		outer.addEventListener("click",showTicket(ticket));
+		return outer;
+		
+	}
+}
+
+function showTicket(ticket)
+{
+	return function()
+	{
+		var form = new formBuilder(ticket);
+		document.getElementById("dialogDiv").innerHTML = "";
+		form.createForm("dialogDiv");
+		jQuery("#dialogDiv").dialog({
+		width:650,
+		height:550
+		});
+	}
+}
+document.addEventListener("DOMContentLoaded",ticketTest);
+ticketTest();
+</script>
+<style>
+.ticketOuter{
+	border:1px solid black;
+	border-top:0px;
+
+}
+.innerTicket,.innerTicketHeader{
+	display:inline-block;
+	width:21.5%;
+}
+.innerTicketHeader
+{
+	background-color:black;
+	color:white;
+}
+.status,.device
+{
+	width:5%;
+	text-align:center;
+}
+.id
+{
+	width:4%;
+	text-align:center;
+}
+#dialogDiv > label
+{
+	width:25%;
+}
+#dialogDiv > input
+{
+	width:74%;
+}
+</style>
+</head>
+<body>
+<div class="ticketOuterHeader"><span class="innerTicketHeader id">ID</span><span class="innerTicketHeader custName">Name</span><span class="innerTicketHeader description">Description</span><span class="innerTicketHeader action">Action</span><span class="innerTicketHeader assignment">Assigned To</span><span class="innerTicketHeader status">Status</span><span class="innerTicketHeader device">Device</span></div>
+<div id = "table">
+</div>
+<div id = "dialogDiv" style = "display:none"></div>
+</body>
+</html>
