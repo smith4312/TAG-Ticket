@@ -142,7 +142,7 @@ object LoggedInAction extends ActionBuilder[Request] {
         block(request);
       }
       else {
-        if ((request.contentType+"").contains("json"))
+        if (request.accepts("application/json"))
         {
           Future.successful(Results.Ok("{\"action\":\"redirect\",\"location\":\"http://localhost:9000/simpleLogin.html?block=notAllowed\"}"));
         }
@@ -156,7 +156,7 @@ object LoggedInAction extends ActionBuilder[Request] {
       case e: Exception =>
         //if can't get cookie go to login
         println("MY ERROR:  "+e.getMessage()+" "+request.contentType+" "+(request.contentType+"").contains("json"));
-        if ((request.contentType+"").contains("json"))
+        if(request.accepts("application/json"))
         {
           Future.successful(Results.Ok("{\"action\":\"redirect\",\"location\":\"http://localhost:9000/simpleLogin.html?block=notAllowed\"}"));
         }
