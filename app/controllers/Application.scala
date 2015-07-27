@@ -9,14 +9,16 @@ import play.api.libs.json.Json.JsValueWrapper
 import play.api.mvc._
 import play.api.db._
 import play.api.libs.json._
+import akka.actor._
+import scala.collection.JavaConversions._
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 
 
 object UserRepository {
-  var users: java.util.HashMap[String, AdminUser] = new java.util.HashMap[String, AdminUser]();
-
+  var users: util.HashMap[String, AdminUser] = new util.HashMap[String, AdminUser]();
+  var lastSweep = new Date();
   def isLoggedIn(user: String, cookieVal: String): Boolean = {
     println("Checking Logged In"+user+"  "+cookieVal);
     if (users.containsKey(user)) {
@@ -25,6 +27,24 @@ object UserRepository {
       if (theUser.checkCookie(cookieVal)) {
         return true;
       }
+    }
+    try{
+      //don't care about a minor delay if not logged in so every 5 mintes cleat out unued cookies
+      var newDate = new Date();
+      if(newDate.getTime - lastSweep.getTime() > (5*1000*60))
+        {
+          lastSweep = newDate;
+        //  for(u:AdminUser <- users)
+       //   {
+       //     u.cleanCookies;
+       //   }
+          users.foreach(kv => kv._2.cleanCookies);
+
+        }
+    }
+    catch{case e: Exception =>
+      println(e.getMessage)
+
     }
     return false;
   };
@@ -111,6 +131,25 @@ class AdminUser
     return newCookieVal;
   }
 
+  def cleanCookies = {
+    var newDate: util.Date = new util.Date();
+   // for(myCookie:cookieItem <- openCookies)
+   //   {
+    openCookies.foreach(kv =>
+        try{
+          var myCookie = kv._2;
+          if(newDate.getTime() - myCookie.lastLogin.getTime() > (30 * 60 * 1000))
+          {
+            openCookies.remove(myCookie.token);
+            println("removing cookie "+myCookie.token);
+          }
+        }
+        catch{
+          case e:Exception =>
+            println(e.getMessage);
+        });
+     // }
+  }
   def checkCookie(cookieVal: String): Boolean = {
     var newDate: util.Date = new util.Date();
 
@@ -135,9 +174,12 @@ class AdminUser
 object LoggedInAction extends ActionBuilder[Request] {
   def invokeBlock[A](request: Request[A], block: (Request[A]) => Future[Result]) = {
     try {
-      var cookieVal: String = request.cookies("userCookie").value;
+      var cookieVal:String = "";
+      if(request.cookies("userCookie") != null) {
+        cookieVal = request.cookies("userCookie").value;
+      }
       var tokens: Array[String] = cookieVal.split(":", 2);
-     // println("Pre Check: "+tokens(0)+" : "+tokens(1));
+      println("Pre Check: "+tokens(0)+" : "+tokens(1));
       if (UserRepository.isLoggedIn(tokens(0), tokens(1))) {
         block(request);
       }
@@ -288,12 +330,130 @@ class Application extends Controller {
         "Office" -> rs.getString("LOCATION"),
         "Created By" -> rs.getString("CREATED_BY"),
         "Assigned To" -> rs.getString("ASSIGNED_TO"),
-        "Notes" -> rs.getString("NOTES")
+        "Notes" -> rs.getString("NOTES"),
+        "Time" -> rs.getTimestamp("TIME"),
+        "Priority" -> rs.getInt("PRIORITY")
       )
     )
     Ok(json)
 
   }
+
+  def getTicketById(tickID:Int) : JsArray = {
+    val conn:java.sql.Connection = DB.getConnection();
+    var query = "SELECT t.id AS \"TICKET_ID\",    t.version AS \"VERSION\",    ta.name AS \"ACTION\",    t.description AS \"DESCRIPTION\",    s.status AS \"STATUS\",    t.account_id AS \"ACCOUNT_ID\",    u.first_name AS \"FIRST_NAME\",    u.last_name AS \"LAST_NAME\",    de.device_type AS \"DEVICE\",    cg.user_name AS \"CREATED_BY\",    ag.user_name AS \"ASSIGNED_TO\",    t.notes AS \"NOTES\",    l.location_name AS \"LOCATION\",    ta.description AS \"ACTION_DESCRIPTION\",    t.person_id AS \"PERSON_ID\",    t.person_device_id AS \"PERSON_DEVICE_ID\",    t.action_id AS \"ACTION_ID\",    t.status_id AS \"STATUS_ID\",    t.office_location_id AS \"OFFICE_LOCATION_ID\",    t.created_agent_id AS \"CREATED_AGENT_ID\",    t.assigned_agent_id AS \"ASSIGNED_AGENT_ID\",    t.\"time\" AS \"TIME\",    t.priority AS \"PRIORITY\"   FROM ticket t,    account a,    person u,    person_device d,    device de,    ticket_action ta,    ticket_status s,    office_location l,    agent ag,    agent cg  WHERE t.account_id = a.id AND t.person_id = u.id AND t.person_device_id = d.id AND d.device_id = de.id AND t.action_id = ta.id AND t.status_id = s.id AND t.office_location_id = l.id AND t.created_agent_id = ag.id AND t.assigned_agent_id = cg.id and t.id = ?";
+    var pstmt: java.sql.PreparedStatement = conn.prepareStatement(query);
+    pstmt.setInt(1,tickID);
+    val json = queryToJson(pstmt, conn, (rs: ResultSet) =>
+      Json.obj(
+        "ticket_id" -> rs.getInt("TICKET_ID"),
+        "version" -> rs.getInt("VERSION"),
+        "Action" -> rs.getString("ACTION"),
+        "Description" -> rs.getString("DESCRIPTION"),
+        "Status"  -> rs.getString("STATUS"),
+        "Account_id" -> rs.getInt("ACCOUNT_ID"),
+        "Person" -> rs.getInt("PERSON_ID"),
+        "First Name" -> rs.getString("FIRST_NAME"),
+        "Last Name" -> rs.getString("LAST_NAME"),
+        "Device_id" -> rs.getInt("PERSON_DEVICE_ID"),
+        "Device" -> rs.getString("DEVICE"),
+        "Office_id" -> rs.getInt("OFFICE_LOCATION_ID"),
+        "Office" -> rs.getString("LOCATION"),
+        "Created By" -> rs.getString("CREATED_BY"),
+        "Assigned To" -> rs.getString("ASSIGNED_TO"),
+        "Notes" -> rs.getString("NOTES"),
+        "Time" -> rs.getTimestamp("TIME"),
+        "Priority" -> rs.getInt("PRIORITY")
+      )
+    )
+    dbCleanup(pstmt,conn);
+    return json;
+  }
+
+  def dbCleanup(pstmt:java.sql.PreparedStatement,conn:java.sql.Connection) =
+  {
+    if(pstmt != null && !pstmt.isClosed)
+    {
+      pstmt.close()
+    }
+    if(conn != null && !conn.isClosed)
+    {
+      conn.close()
+    }
+  }
+
+  def updateExtras(json:JsArray,logInfo:String,tickID:Int) = {
+    //Do some logging
+    wsList.foreach(ws => ws.receive(
+      Json.obj(
+        "sender"->"server",
+        "Action"->"update",
+        "message" -> json
+      )
+    ));
+  }
+
+  def setUpSQL(conn:java.sql.Connection,newField:String,newValue:String,tickID:Int) : java.sql.PreparedStatement= {
+    var pstmt: java.sql.PreparedStatement = null;
+    if(newField == "notes")
+    {
+      var query:String = "update ticket set notes = ?, time = time where id = ?";
+      pstmt = conn.prepareStatement(query);
+      pstmt.setString(1,newValue);
+      pstmt.setInt(2,tickID);
+    }
+
+    if(newField == "assignment")
+    {
+      var query:String = "update ticket set assigned_agent_id = ?, time = time where id = ?";
+      pstmt = conn.prepareStatement(query);
+      pstmt.setInt(1,newValue.toInt);
+      pstmt.setInt(2,tickID);
+    }
+
+    if(newField == "status")
+    {
+      var query:String = "update ticket set status_id = ?, time = time where id = ?";
+      pstmt = conn.prepareStatement(query);
+      pstmt.setInt(1,newValue.toInt);
+      pstmt.setInt(2,tickID);
+    }
+    return pstmt;
+  }
+  def updateTickInfo = LoggedInAction(parse.json) { request =>
+    val json = request.body;
+    val tickID = (json \ "tickID").as[Int];
+    val newInfo = (json \ "newInfo").as[String];
+    val newField = (json \ "newField").as[String];
+    var conn = DB.getConnection();
+    var pstmt: java.sql.PreparedStatement= setUpSQL(conn,newField,newInfo,tickID);
+    if(pstmt == null)
+    {
+      Ok(Json.obj(
+        "result" -> "invalid info"
+      ))
+    }
+    var updated:Int = 0;
+    try{
+      updated = pstmt.executeUpdate();
+    }
+    finally{
+      dbCleanup(pstmt,conn);
+    }
+    if(updated > 0)
+    {
+      var json = getTicketById(tickID);
+      updateExtras(json,"",tickID);
+      Ok(Json.obj(
+        "result" -> "updated"
+      ))
+    }
+    dbCleanup(null,conn);
+    Ok(Json.obj(
+    "result" -> "error"
+    ))
+  }
+
 
   def listPersonsDevices = LoggedInAction(parse.json) { request =>
       val json = request.body;
@@ -389,4 +549,57 @@ Ok(outputJSON)
 	- new filter / remove filter
      */
 	 def updateAccount = TODO
+
+  def socket = WebSocket.acceptWithActor[JsValue, JsValue] { request => out =>
+    MyWebSocketActor.props(out)
+  }
+
+  object MyWebSocketActor {
+    def props(out: ActorRef) = Props(new MyWebSocketActor(out))
+  }
+
+  def clientAction(action:String,args:String) : JsValue = {
+    if(action == "echo")
+    {
+      return Json.obj(
+        "response" -> ("Message received :" + args+" "+wsList.size())
+      );
+    }
+    return Json.obj(
+      "response" -> "Not Found"
+    );
+  }
+
+  var wsList = new util.ArrayList[Actor]();
+  class MyWebSocketActor(out: ActorRef) extends Actor {
+    def receive = {
+      case msg: JsValue =>
+        val sender = (msg \ "sender").as[String];
+        if(sender == "client")
+        {
+          out ! clientAction((msg \ "action").as[String],(msg \ "args").as[String]);
+        }
+        if(sender == "server")
+        {
+          out ! msg;
+        }
+    }
+
+    override def preStart = {
+      wsList.add(this);
+    }
+    override def postStop() = {
+      wsList.remove(this);
+    }
+  }
+
+  def wsTester = Action{
+    wsList.foreach(ws => ws.receive(
+    Json.obj(
+      "sender"->"server",
+      "message" -> "Over Here"
+    )
+    ));
+    Ok("done");
+  }
 }
