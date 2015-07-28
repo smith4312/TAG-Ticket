@@ -212,7 +212,7 @@ object LoggedInAction extends ActionBuilder[Request] {
 
 
 class Application extends Controller {
-
+  var vTicketBase:String = "SELECT t.id AS \"TICKET_ID\",    t.version AS \"VERSION\",    ta.name AS \"ACTION\",    t.description AS \"DESCRIPTION\",    s.status AS \"STATUS\",    t.account_id AS \"ACCOUNT_ID\",    u.first_name AS \"FIRST_NAME\",    u.last_name AS \"LAST_NAME\",    de.device_type AS \"DEVICE\",    cg.user_name AS \"CREATED_BY\",    ag.user_name AS \"ASSIGNED_TO\",    t.notes AS \"NOTES\",    l.location_name AS \"LOCATION\",    ta.description AS \"ACTION_DESCRIPTION\",    t.person_id AS \"PERSON_ID\",    t.person_device_id AS \"PERSON_DEVICE_ID\",    t.action_id AS \"ACTION_ID\",    t.status_id AS \"STATUS_ID\",    t.office_location_id AS \"OFFICE_LOCATION_ID\",    t.created_agent_id AS \"CREATED_AGENT_ID\",    t.assigned_agent_id AS \"ASSIGNED_AGENT_ID\",    t.\"time\" AS \"TIME\",    t.priority AS \"PRIORITY\"   FROM ticket t,    account a,    person u,    person_device d,    device de,    ticket_action ta,    ticket_status s,    office_location l,    agent ag,    agent cg  WHERE t.account_id = a.id AND t.person_id = u.id AND t.person_device_id = d.id AND d.device_id = de.id AND t.action_id = ta.id AND t.status_id = s.id AND t.office_location_id = l.id AND t.created_agent_id = cg.id AND t.assigned_agent_id = ag.id";
   def index = Action {
     Ok
   }
@@ -341,7 +341,7 @@ class Application extends Controller {
 
   def getTicketById(tickID:Int) : JsArray = {
     val conn:java.sql.Connection = DB.getConnection();
-    var query = "SELECT t.id AS \"TICKET_ID\",    t.version AS \"VERSION\",    ta.name AS \"ACTION\",    t.description AS \"DESCRIPTION\",    s.status AS \"STATUS\",    t.account_id AS \"ACCOUNT_ID\",    u.first_name AS \"FIRST_NAME\",    u.last_name AS \"LAST_NAME\",    de.device_type AS \"DEVICE\",    cg.user_name AS \"CREATED_BY\",    ag.user_name AS \"ASSIGNED_TO\",    t.notes AS \"NOTES\",    l.location_name AS \"LOCATION\",    ta.description AS \"ACTION_DESCRIPTION\",    t.person_id AS \"PERSON_ID\",    t.person_device_id AS \"PERSON_DEVICE_ID\",    t.action_id AS \"ACTION_ID\",    t.status_id AS \"STATUS_ID\",    t.office_location_id AS \"OFFICE_LOCATION_ID\",    t.created_agent_id AS \"CREATED_AGENT_ID\",    t.assigned_agent_id AS \"ASSIGNED_AGENT_ID\",    t.\"time\" AS \"TIME\",    t.priority AS \"PRIORITY\"   FROM ticket t,    account a,    person u,    person_device d,    device de,    ticket_action ta,    ticket_status s,    office_location l,    agent ag,    agent cg  WHERE t.account_id = a.id AND t.person_id = u.id AND t.person_device_id = d.id AND d.device_id = de.id AND t.action_id = ta.id AND t.status_id = s.id AND t.office_location_id = l.id AND t.created_agent_id = ag.id AND t.assigned_agent_id = cg.id and t.id = ?";
+    var query = vTicketBase+" and t.id = ?";
     var pstmt: java.sql.PreparedStatement = conn.prepareStatement(query);
     pstmt.setInt(1,tickID);
     val json = queryToJson(pstmt, conn, (rs: ResultSet) =>
@@ -409,6 +409,7 @@ class Application extends Controller {
       pstmt = conn.prepareStatement(query);
       pstmt.setInt(1,newValue.toInt);
       pstmt.setInt(2,tickID);
+     // println(query);
     }
 
     if(newField == "status")
@@ -433,6 +434,7 @@ class Application extends Controller {
         "result" -> "invalid info"
       ))
     }
+
     var updated:Int = 0;
     try{
       updated = pstmt.executeUpdate();

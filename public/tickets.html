@@ -12,6 +12,9 @@
 var wsTestURL = "ws://localhost:9000/wsTest";
 var wsTest = new WebSocket(wsTestURL);
 var ticketIDRegistry;
+var ticketTypes;
+var availabelAgents;
+var ticketStatuses;
 wsTest.onmessage = function(event)
 {
 	var info = JSON.parse(event.data);
@@ -21,6 +24,46 @@ wsTest.onmessage = function(event)
 		checkUpdates(info.message[0]);
 	}
 }
+
+function getTicketInfo()
+{
+     var to = "http://"+window.location.hostname+":9000/ticketTypes";
+	 $.get(to,function(data){console.log(data); ticketTypes = data;});
+	 to = "http://"+window.location.hostname+":9000/statusTypes";
+	 $.get(to,function(data){console.log(data); ticketStatuses = data;});
+	 to = "http://"+window.location.hostname+":9000/agents";
+	 $.get(to,function(data){console.log(data); availabelAgents = data;});
+}
+
+function createTicketStatusSelect(id)
+{
+	var select = document.createElement("select");
+	select.id = id;
+	for(var i = 0; i < ticketStatuses.length;i++)
+	{
+		var opt = document.createElement("option");
+		opt.value = ticketStatuses[i].id+"";
+		opt.innerHTML = ticketStatuses[i].Status;
+		select.appendChild(opt);
+	}
+	return select;
+}
+
+function createAgentSelect(id)
+{
+	var select1 = document.createElement("select");
+	select1.id = id;
+	for(var i = 0; i < availabelAgents.length;i++)
+	{
+		var opt = document.createElement("option");
+		opt.value = availabelAgents[i].id+"";
+		opt.innerHTML = availabelAgents[i].firstName + "&nbsp;"+availabelAgents[i].lastName;
+		select1.appendChild(opt);
+	}
+	return select1;
+}
+
+document.addEventListener("DOMContentLoaded",getTicketInfo);
 
 function checkUpdates(ticket)
 {
@@ -213,7 +256,7 @@ tickets.draw = function(position,viewMode,ticket)
 		var buttonDiv = document.createElement("div");
 		buttonDiv.id = "dialogButtons";
 		div.appendChild(buttonDiv);
-		var but1 = document.createElement("button");
+	/*	var but1 = document.createElement("button");
 		but1.className = "btn btn-primary";
 		but1.innerHTML = "Assign To Me";
 		but1.addEventListener("click",function(){alert("hi");});
@@ -226,7 +269,18 @@ tickets.draw = function(position,viewMode,ticket)
 		var but3 = document.createElement("button");
 		but3.className = "btn btn-primary";
 		but3.innerHTML = "Cancel";
-		but3.addEventListener("click",updateStatusOnTicket("6",ticket["ticket_id"]));
+		but3.addEventListener("click",updateStatusOnTicket("6",ticket["ticket_id"]));*/
+		buttonDiv.appendChild(createTicketStatusSelect("assignStatusSelect"));
+		var but2 = document.createElement("button");
+		but2.className = "btn btn-primary";
+		but2.innerHTML = "Set Status";
+		but2.addEventListener("click",updateStatusOnTicket("assignStatusSelect",ticket["ticket_id"]));
+		buttonDiv.appendChild(but2);
+		buttonDiv.appendChild(createAgentSelect("assignAgentSelect"));
+		var but3 = document.createElement("button");
+		but3.className = "btn btn-primary";
+		but3.innerHTML = "Assign";
+		but3.addEventListener("click",updateAgentOnTicket("assignAgentSelect",ticket["ticket_id"]));
 		buttonDiv.appendChild(but3);
 		var notes = document.createElement("div");
 		notes.id = "dialogNotes";
@@ -257,16 +311,34 @@ function updateNotesOnTicket(notes,ticketID)
 	}
 }
 
-function updateStatusOnTicket(status,ticketID)
+function updateStatusOnTicket(statusID,ticketID)
 {
 	return function()
 	{
-	    var json = {newField:"status",newInfo:status,tickID:ticketID};
+	    var status = document.getElementById(statusID).value;
+		var json = {newField:"status",newInfo:status,tickID:ticketID};
 		var func = function(data)
 		{
 			jQuery("#dialogDiv").dialog('close');
 		};
 		var to = "http://localhost:9000/updateTickInfo";
+		runJSONAjax(to,json,func);
+	}
+}
+
+function updateAgentOnTicket(agentSelectID,ticketID)
+{
+	return function()
+	{
+	    var agentID = document.getElementById(agentSelectID).value;
+		//alert(document.getElementById(agentSelectID).value);
+		var json = {newField:"assignment",newInfo:agentID,tickID:ticketID};
+		var func = function(data)
+		{
+			jQuery("#dialogDiv").dialog('close');
+		};
+		var to = "http://localhost:9000/updateTickInfo";
+	//	console.log(document.getElementById(agentSelectID).value+"  "+JSON.stringify(json)+"  "+agentSelectID);
 		runJSONAjax(to,json,func);
 	}
 }
@@ -287,6 +359,7 @@ function showDevices(ticket)
 	{
 		event = event || window.event;
 		event.preventDefault();
+		event.stopPropagation();
 		var json = {id:ticket.Person};
 		console.log(JSON.stringify(json));
 		document.getElementById("dialogDiv").innerHTML = "Please Wait...";
@@ -370,7 +443,10 @@ function showTicket(ticket)
 	return function()
 	{
 		var form = new formBuilder(ticket);
-		document.getElementById("dialogDiv").innerHTML = "";
+		var myNode = document.getElementById("dialogDiv");
+		while (myNode.firstChild) {
+			myNode.removeChild(myNode.firstChild);
+		}
 		//form.createForm("dialogDiv");
 		document.getElementById("dialogDiv").appendChild(tickets.draw(null,"popUp",ticket));
 		jQuery("#dialogDiv").dialog({
