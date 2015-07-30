@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="http://code.jquery.com/jquery-latest.min.js"></script>
+<!-- Latest compiled and minified CSS -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+
+<!-- Optional theme -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap-theme.min.css">
+
+<!-- Latest compiled and minified JavaScript -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+<script>
+var redirectMe = "";
+function doLogin()
+{
+	var userName = document.getElementById("username").value;
+	var pwd = document.getElementById("pwd").value;
+	var myJSON = {username:userName,password:pwd};
+	var theURL = "http://localhost:9000/loginService";
+	$.ajax
+	({
+		type:"POST",
+		url:theURL,
+		data:JSON.stringify(myJSON),
+		success:function(data)
+		{
+			if(data.redirect && data.success)
+			{
+				if(redirectMe != "")
+				{
+					if(redirectMe.indexOf("http") != 0)
+					{
+						redirectMe = "http://"+redirectMe;
+					}
+					window.location = redirectMe;
+				}
+				else
+				{
+					window.location = data.redirect.toString();
+				}
+			}
+			else
+			{
+				document.getElementById("result").innerHTML = data.error;
+			}
+		},
+		contentType: "application/json; charset=utf-8",
+		dataType: "json"
+	});
+}
+
+function startUp()
+{
+	var params = getUrlVars();
+	if(params["url"] != null)
+	{
+		redirectMe = location.host + decodeURIComponent(params["url"]);
+	}
+	if(params["block"] == "notAllowed")
+	{
+		document.getElementById("result").innerHTML = "You need to be logged in to access this page. Please log in now";
+	}
+}
+
+document.addEventListener("DOMContentLoaded",startUp);
+
+function getUrlVars() {
+    var vars = {};
+    var parts = window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m,key,value) {
+        vars[key] = value;
+    });
+    return vars;
+}
+</script>
+<style>
+body{
+background-color:#CCCCFF;
+}
+#wrapper{
+background-color:white;
+padding:25px;
+margin:auto;
+margin-top:10%;
+width:35%;
+
+}
+#result{
+margin:25px;
+background-color:#FF9999;
+}
+</style>
+</head>
+<body>
+<div id = "wrapper">
+<input type = "text" id = "username" class="form-control" placeholder = "User Name"/>
+<br>
+<input type = "password" id = "pwd" placeholder = "Password" class="form-control"/>
+<br>
+<button onclick = "doLogin();" class="btn btn-primary">Log In</button>
+<div id = "result"></div>
+</div>
+</body>
+</html>

@@ -12,6 +12,12 @@ GET     /tickets                    controllers.Application.listTickets
 GET     /ticketTypes                controllers.Application.getTicketTypes
 GET     /statusTypes                controllers.Application.getTicketStatusTypes
 
+
+GET     /test1                      controllers.Application.test1
+
+GET     /test2                      controllers.Application.test2
+
+POST    /loginService               controllers.Application.loginFunction
 # Map static resources from the /public folder to the /assets URL path
 GET     /*file               controllers.Assets.at(path="/public", file)
 
