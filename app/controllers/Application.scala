@@ -14,190 +14,40 @@ import scala.collection.JavaConversions._
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
+import java.sql.Statement
 
-
-object UserRepository {
-  var users: util.HashMap[String, AdminUser] = new util.HashMap[String, AdminUser]();
-  var lastSweep = new Date();
-  def isLoggedIn(user: String, cookieVal: String): Boolean = {
-    println("Checking Logged In"+user+"  "+cookieVal);
-    if (users.containsKey(user)) {
-      var theUser: AdminUser = users.get(user);
-      println("Has User")
-      if (theUser.checkCookie(cookieVal)) {
-        return true;
-      }
-    }
-    try{
-      //don't care about a minor delay if not logged in so every 5 mintes cleat out unued cookies
-      var newDate = new Date();
-      if(newDate.getTime - lastSweep.getTime() > (5*1000*60))
-        {
-          lastSweep = newDate;
-        //  for(u:AdminUser <- users)
-       //   {
-       //     u.cleanCookies;
-       //   }
-          users.foreach(kv => kv._2.cleanCookies);
-
-        }
-    }
-    catch{case e: Exception =>
-      println(e.getMessage)
-
-    }
-    return false;
-  };
-
-  def logIn(user: String, password: String): String = {
-
-    //either the password was changed or the user is not yet in memory
-    //Lets get it from the db
-    var conn: java.sql.Connection = DB.getConnection();
-    var pstmt: java.sql.PreparedStatement = null;
-    var rs: java.sql.ResultSet = null;
-    var newCookie: String = "Not Allowed";
-    try {
-      var query: String = "Select access_level,last_name,first_name from agent where user_name = ? AND password = ?";
-      pstmt = conn.prepareStatement(query);
-      pstmt.setString(1, user);
-      pstmt.setString(2, password);
-      rs = pstmt.executeQuery();
-      if (rs.next()) {
-      //  println("Yeah have something");
-        if (users.containsKey(user)) {
-          var oldUser: AdminUser = users.get(user);
-          oldUser.password = password;
-          oldUser.accessLevel = rs.getString("access_level");
-          oldUser.fullName = rs.getString("first_name") + " " + rs.getString("last_name");
-          newCookie = oldUser.addCookie();
-        }
-        else {
-          var newUser: AdminUser = new AdminUser(user, password, rs.getString("first_name") + " " + rs.getString("last_name"), rs.getString("access_level"));
-          users.put(user, newUser);
-          newCookie = newUser.addCookie();
-        }
-      }
-    }
-    finally {
-      if (!conn.isClosed()) {
-        conn.close();
-      }
-      if (pstmt != null && !pstmt.isClosed()) {
-        pstmt.close();
-      }
-      if (rs != null && !rs.isClosed()) {
-        rs.close();
-      }
-
-    }
-    return user + ":" + newCookie;
-  }
-
-}
-
-class cookieItem{
-  var lastLogin: util.Date = new Date();
-  var token:String = null;
-}
-
-class AdminUser
-(var userName: String,
- var password: String,
- var fullName: String,
- var accessLevel: String) {
-  var lastLogin: util.Date = new Date();
-  //if expired then forward to the login page
-  var openCookies: util.HashMap[String,cookieItem] = new util.HashMap[String,cookieItem]();
-
-  //etc.
-
-  def getPassword(): String = {
-    return password;
-  }
-
-  def touch(): Unit = {
-    lastLogin = new util.Date();
-  }
-
-  def addCookie(): String = {
-    //generate Cookie
-    touch();
-    var newCookieVal: String = (new util.Date()).toGMTString() + userName;
-    newCookieVal = newCookieVal.replace(" ","");
-    //TODO:need to encrypt it
-    val newCookie:cookieItem = new cookieItem();
-    openCookies.put(newCookieVal,newCookie);
-    return newCookieVal;
-  }
-
-  def cleanCookies = {
-    var newDate: util.Date = new util.Date();
-   // for(myCookie:cookieItem <- openCookies)
-   //   {
-    openCookies.foreach(kv =>
-        try{
-          var myCookie = kv._2;
-          if(newDate.getTime() - myCookie.lastLogin.getTime() > (30 * 60 * 1000))
-          {
-            openCookies.remove(myCookie.token);
-            println("removing cookie "+myCookie.token);
-          }
-        }
-        catch{
-          case e:Exception =>
-            println(e.getMessage);
-        });
-     // }
-  }
-  def checkCookie(cookieVal: String): Boolean = {
-    var newDate: util.Date = new util.Date();
-
-    if (openCookies.containsKey(cookieVal)) {
-      val myCookie:cookieItem = openCookies.get(cookieVal);
-      if(newDate.getTime() - myCookie.lastLogin.getTime() > (30 * 60 * 1000))
-      {
-        openCookies.remove(cookieVal);
-        println("removing cookie "+cookieVal);
-        return false;
-      }
-      else
-      {
-        myCookie.lastLogin = new util.Date();
-      }
-      return true;
-    }
-    return false;
-  }
-}
-
+/*
+Create an action that authenticates the user before allowing login
+ */
 object LoggedInAction extends ActionBuilder[Request] {
   def invokeBlock[A](request: Request[A], block: (Request[A]) => Future[Result]) = {
     try {
       var cookieVal:String = "";
+      //Check the cookie is set
       if(request.cookies("userCookie") != null) {
         cookieVal = request.cookies("userCookie").value;
       }
       var tokens: Array[String] = cookieVal.split(":", 2);
-      println("Pre Check: "+tokens(0)+" : "+tokens(1));
+      //check the user is logged in before allowing the rest of the action
       if (UserRepository.isLoggedIn(tokens(0), tokens(1))) {
         block(request);
       }
+      //If not redirect to the Login
       else {
+        //If this is expecting JSON it needs to tell the JS to redirect
         if (request.accepts("application/json"))
         {
           Future.successful(Results.Ok("{\"action\":\"redirect\",\"location\":\"http://localhost:9000/simpleLogin.html?block=notAllowed\"}"));
         }
         else
         {
+          //redirect to login page and tell the login page where you were trying to go so it can redirect there after
           Future.successful(Results.Redirect("http://localhost:9000/simpleLogin.html?block=notAllowed&url="+java.net.URLEncoder.encode(request.uri,"utf-8")));
         }
       }
     }
     catch {
-      case e: Exception =>
-        //if can't get cookie go to login
-        println("MY ERROR:  "+e.getMessage()+" "+request.contentType+" "+(request.contentType+"").contains("json"));
+      case e: Exception => ;
         if(request.accepts("application/json"))
         {
           Future.successful(Results.Ok("{\"action\":\"redirect\",\"location\":\"http://localhost:9000/simpleLogin.html?block=notAllowed\"}"));
@@ -212,27 +62,54 @@ object LoggedInAction extends ActionBuilder[Request] {
 
 
 class Application extends Controller {
-  var vTicketBase:String = "SELECT t.id AS \"TICKET_ID\",    t.version AS \"VERSION\",    ta.name AS \"ACTION\",    t.description AS \"DESCRIPTION\",    s.status AS \"STATUS\",    t.account_id AS \"ACCOUNT_ID\",    u.first_name AS \"FIRST_NAME\",    u.last_name AS \"LAST_NAME\",    de.device_type AS \"DEVICE\",    cg.user_name AS \"CREATED_BY\",    ag.user_name AS \"ASSIGNED_TO\",    t.notes AS \"NOTES\",    l.location_name AS \"LOCATION\",    ta.description AS \"ACTION_DESCRIPTION\",    t.person_id AS \"PERSON_ID\",    t.person_device_id AS \"PERSON_DEVICE_ID\",    t.action_id AS \"ACTION_ID\",    t.status_id AS \"STATUS_ID\",    t.office_location_id AS \"OFFICE_LOCATION_ID\",    t.created_agent_id AS \"CREATED_AGENT_ID\",    t.assigned_agent_id AS \"ASSIGNED_AGENT_ID\",    t.\"time\" AS \"TIME\",    t.priority AS \"PRIORITY\"   FROM ticket t,    account a,    person u,    person_device d,    device de,    ticket_action ta,    ticket_status s,    office_location l,    agent ag,    agent cg  WHERE t.account_id = a.id AND t.person_id = u.id AND t.person_device_id = d.id AND d.device_id = de.id AND t.action_id = ta.id AND t.status_id = s.id AND t.office_location_id = l.id AND t.created_agent_id = cg.id AND t.assigned_agent_id = ag.id";
+  //An easy replacement where I need to mimic v_ticket view
+  var vTicketBase:String =
+    """SELECT t.id AS "TICKET_ID",
+      |    t.version AS "VERSION",
+      |    ta.name AS "ACTION",
+      |    t.description AS "DESCRIPTION",
+      |    s.status AS "STATUS",
+      |    t.account_id AS "ACCOUNT_ID",
+      |    u.first_name AS "FIRST_NAME",
+      |    u.last_name AS "LAST_NAME",
+      |    de.device_type AS "DEVICE",
+      |    cg.user_name AS "CREATED_BY",
+      |    ag.user_name AS "ASSIGNED_TO",
+      |    t.notes AS "NOTES",
+      |    l.location_name AS "LOCATION",
+      |    ta.description AS "ACTION_DESCRIPTION",
+      |    t.person_id AS "PERSON_ID",
+      |    t.person_device_id AS "PERSON_DEVICE_ID",
+      |    t.action_id AS "ACTION_ID",
+      |    t.status_id AS "STATUS_ID",
+      |    t.office_location_id AS "OFFICE_LOCATION_ID",
+      |    t.created_agent_id AS "CREATED_AGENT_ID",
+      |    t.assigned_agent_id AS "ASSIGNED_AGENT_ID",
+      |    t."time" AS "TIME",
+      |    t.priority AS "PRIORITY"
+      |   FROM ticket t INNER JOIN
+      |    account a ON (t.account_id = a.id) INNER JOIN
+      |    person u ON (t.person_id = u.id) INNER JOIN
+      |    person_device d ON (t.person_device_id = d.id) INNER JOIN
+      |    device de ON (d.device_id = de.id) INNER JOIN
+      |    ticket_action ta ON (t.action_id = ta.id) INNER JOIN
+      |    ticket_status s ON (t.status_id = s.id) INNER JOIN
+      |    office_location l ON (t.office_location_id = l.id ) Left JOIN
+      |    agent ag ON (t.assigned_agent_id = ag.id) INNER JOIN
+      |    agent cg ON (t.created_agent_id = cg.id)""".stripMargin;
+
   def index = Action {
     Ok
   }
-
-  def test1 = Action {
-    Ok("hello world");
-  };
-
-  def test2 = LoggedInAction {
-    Ok("hello world");
-  };
-
+//DO Login
   def loginFunction = Action {
     request =>
       request.body.asJson.map { json =>
         val user = (json \ "username").as[String];
         val pwd = (json \ "password").as[String];
-        println(user + "  "+pwd);
+        //Try to login and generate a new login cookie
         val newCookie = UserRepository.logIn(user, pwd);
-        println(newCookie);
+        //If login failed it would generate this so respond accordingly
         if (newCookie.contains("Not Allowed")) {
           Ok(Json.obj(
             "success" -> false,
@@ -241,10 +118,11 @@ class Application extends Controller {
           ));
         }
         else {
+          //tell it by default to redirect to the ticket page the Page can decide to ignore this and redirect to another page if it knew where you were going first
           Ok(Json.obj(
             "success" -> true,
             "error" -> "",
-            "redirect" -> "http://localhost:9000/test2"
+            "redirect" -> "http://localhost:9000/tickets.html"
           )).withCookies(Cookie("userCookie", newCookie));
         }
       }.getOrElse {
@@ -274,6 +152,10 @@ class Application extends Controller {
     JsArray(jsonBuffer)
   }
 
+  /*
+  Same as above but with Prepared Statements to prevent SQL Injection
+  The connection is needed to generate the PreparedStatement so can't be closed here as it needs to be passed in
+   */
   def queryToJson(query: java.sql.PreparedStatement,conn: java.sql.Connection, rsToJsRow: ResultSet => JsValue): JsArray = {
     var jsonBuffer = ArrayBuffer.empty[JsValue];
     try {
@@ -312,7 +194,7 @@ class Application extends Controller {
   // - can these be
   def listTickets = LoggedInAction {
 
-    val query = "SELECT * from V_TICKET"
+    val query = vTicketBase;
     val json = queryToJson(query, (rs: ResultSet)=>
       Json.obj(
         "ticket_id" -> rs.getInt("TICKET_ID"),
@@ -341,7 +223,7 @@ class Application extends Controller {
 
   def getTicketById(tickID:Int) : JsArray = {
     val conn:java.sql.Connection = DB.getConnection();
-    var query = vTicketBase+" and t.id = ?";
+    var query = vTicketBase+" WHERE t.id = ?";
     var pstmt: java.sql.PreparedStatement = conn.prepareStatement(query);
     pstmt.setInt(1,tickID);
     val json = queryToJson(pstmt, conn, (rs: ResultSet) =>
@@ -370,6 +252,7 @@ class Application extends Controller {
     return json;
   }
 
+  //check and close if open DB relevant items
   def dbCleanup(pstmt:java.sql.PreparedStatement,conn:java.sql.Connection) =
   {
     if(pstmt != null && !pstmt.isClosed)
@@ -382,6 +265,12 @@ class Application extends Controller {
     }
   }
 
+  /*
+  This is a place to run the additional things that need to be done after a ticket is updated like logging the action and broadcasting the new ticket to all the websockets
+  @json the ticket to broadcast to the websockets
+  @logInfo the text that should be added to the log
+  @tickID the ticket ID that the action applies to
+   */
   def updateExtras(json:JsArray,logInfo:String,tickID:Int) = {
     //Do some logging
     wsList.foreach(ws => ws.receive(
@@ -393,6 +282,9 @@ class Application extends Controller {
     ));
   }
 
+  /*
+  Create the PreparedStatments for the different types of update types
+   */
   def setUpSQL(conn:java.sql.Connection,newField:String,newValue:String,tickID:Int) : java.sql.PreparedStatement= {
     var pstmt: java.sql.PreparedStatement = null;
     if(newField == "notes")
@@ -407,9 +299,14 @@ class Application extends Controller {
     {
       var query:String = "update ticket set assigned_agent_id = ?, time = time where id = ?";
       pstmt = conn.prepareStatement(query);
-      pstmt.setInt(1,newValue.toInt);
+      if(newValue.toInt >= 0) {
+        pstmt.setInt(1, newValue.toInt);
+      }
+      else
+      {
+        pstmt.setNull(1,java.sql.Types.NULL);
+      }
       pstmt.setInt(2,tickID);
-     // println(query);
     }
 
     if(newField == "status")
@@ -421,6 +318,10 @@ class Application extends Controller {
     }
     return pstmt;
   }
+  /*
+  Generic service for updating tickets
+
+   */
   def updateTickInfo = LoggedInAction(parse.json) { request =>
     val json = request.body;
     val tickID = (json \ "tickID").as[Int];
@@ -456,6 +357,71 @@ class Application extends Controller {
     ))
   }
 
+  def getAdminInfo = LoggedInAction{request =>
+    var user:Option[AdminUser] = None;
+    //Check the cookie is set
+    if(request.cookies("userCookie") != null) {
+      var cookieVal = request.cookies("userCookie").value;
+      var tokens: Array[String] = cookieVal.split(":", 2);
+      user = UserRepository.getUserInfo(tokens(0));
+    }
+    user match {
+      case Some(u) => Ok(Json.toJson(u))
+      case None => Ok(Json.obj("error"->"Not Found"))
+    }
+  };
+
+  def createTicket = LoggedInAction(parse.json){ request =>
+    val json = request.body;
+    val userID = (json \ "userID").as[Int];
+    val description = (json \ "subject").as[String];
+    val tickType = (json \ "type").as[Int];
+    val office = (json \ "office").as[Int];
+    val notes = (json \ "notes").as[String];
+    val agent = (json \ "agent").as[Int];
+    val assign = (json \ "assign").as[Int];
+    val priority = (json \ "priority").as[Int];
+    var pstmt:java.sql.PreparedStatement = null;
+    var success:Boolean = false;
+    val query:String = "Insert Into ticket (person_id,description,action_id,office_location_id,notes,created_agent_id,assigned_agent_id,priority) VALUES (?,?,?,?,?,?,?,?);";
+    var conn = DB.getConnection();
+    try{
+      pstmt = conn.prepareStatement(query,Statement.RETURN_GENERATED_KEYS);
+      pstmt.setInt(1,userID);
+      pstmt.setString(2,description);
+      pstmt.setInt(3,tickType);
+      pstmt.setInt(4,office);
+      pstmt.setString(5,notes);
+      pstmt.setInt(6,agent);
+      pstmt.setInt(7,assign);
+      pstmt.setInt(8,priority);
+      var result = pstmt.executeUpdate();
+      var keys = pstmt.getGeneratedKeys();
+      keys.next();
+      var key = keys.getInt(1);
+      if(result > 0)
+      {
+        success = true;
+        var json = getTicketById(key);
+        updateExtras(json,"created TickID: "+key,key);
+      }
+    }
+    catch{
+      case e:Exception => println(e.getMessage());
+    }
+    finally{
+      dbCleanup(pstmt,conn);
+    }
+    if(success)
+    {
+      Ok(Json.obj(
+        "result" -> "ticket created"
+      ))
+    }
+    Ok(Json.obj(
+      "result" -> "Error creating ticket"
+    ))
+  }
 
   def listPersonsDevices = LoggedInAction(parse.json) { request =>
       val json = request.body;
@@ -516,6 +482,24 @@ Ok(outputJSON)
 
   }
 
+  def getAllSortedUsers = LoggedInAction {
+
+    val query = "SELECT * FROM PERSON ORDER BY last_name,first_name";
+    val json = queryToJson(query, (rs: ResultSet) =>
+      Json.obj(
+        "id" -> rs.getInt("id"),
+        "lastName" -> rs.getString("last_name"),
+        "firstName" -> rs.getString("first_name"),
+        "account" -> rs.getInt("account_id"),
+        "email" -> rs.getString("email"),
+        "phone" -> rs.getString("phone"),
+        "mobile" -> rs.getString("mobile_phone"),
+        "notes" -> rs.getString("notes")
+      )
+    )
+    Ok(json)
+
+  }
 
   def getTicketStatusTypes = Action {
     val query = "SELECT id, status, description from TICKET_STATUS"
@@ -535,7 +519,7 @@ Ok(outputJSON)
 
   def findAccount = TODO
 
-  def createTicket = TODO
+  //def createTicket = TODO
 
   def getAccount = TODO
 
@@ -551,7 +535,9 @@ Ok(outputJSON)
 	- new filter / remove filter
      */
 	 def updateAccount = TODO
-
+/*
+The code for setting up the websockets to broadcast the ticket changes
+ */
   def socket = WebSocket.acceptWithActor[JsValue, JsValue] { request => out =>
     MyWebSocketActor.props(out)
   }

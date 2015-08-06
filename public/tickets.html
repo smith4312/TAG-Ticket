@@ -6,8 +6,10 @@
 		<!-- Optional theme -->
 <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap-theme.min.css">
 <script src="http://admin.usanativ.com:8080/webservices2/webresources/portal/a/js/genericTables2.js"></script>
-<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>
-<link rel="stylesheet" type="text/css" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css">
+<script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
+<link rel="stylesheet" type="text/css" href="http://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+<link href="//cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/css/select2.min.css" rel="stylesheet" />
+<script src="//cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/js/select2.min.js"></script>
 <script>
 var wsTestURL = "ws://localhost:9000/wsTest";
 var wsTest = new WebSocket(wsTestURL);
@@ -15,10 +17,12 @@ var ticketIDRegistry;
 var ticketTypes;
 var availabelAgents;
 var ticketStatuses;
+var adminInfo;
+var userList = new Array();
 wsTest.onmessage = function(event)
 {
 	var info = JSON.parse(event.data);
-	console.log(info.Action);
+	console.log(info);
 	if(info.Action == "update")
 	{
 		checkUpdates(info.message[0]);
@@ -33,6 +37,24 @@ function getTicketInfo()
 	 $.get(to,function(data){console.log(data); ticketStatuses = data;});
 	 to = "http://"+window.location.hostname+":9000/agents";
 	 $.get(to,function(data){console.log(data); availabelAgents = data;});
+	 to = "http://"+window.location.hostname+":9000/getSortedUsers";
+	 $.get(to,function(data)
+	 {
+		for(var i = 0; i < data.length;i++)
+		{
+			var key = data[i].lastName+","+data[i].firstName+" p:"+data[i].phone+" m:"+data[i].mobile;
+			userList[key]=data[i];
+		}
+		//console.log(Object.keys(userList));
+		
+	 });
+	 to = "http://"+window.location.hostname+":9000/getAdminInfo";
+	 $.get(to,function(data)
+	 {
+		console.log(data);
+		adminInfo = data;
+		document.getElementById("Greeting").innerHTML = "Hello "+adminInfo.fullName;
+	});
 }
 
 function createTicketStatusSelect(id)
@@ -53,6 +75,10 @@ function createAgentSelect(id)
 {
 	var select1 = document.createElement("select");
 	select1.id = id;
+	var opt = document.createElement("option");
+	opt.value = "-1";
+	opt.innerHTML = "Unassigned";
+	select1.appendChild(opt);
 	for(var i = 0; i < availabelAgents.length;i++)
 	{
 		var opt = document.createElement("option");
@@ -466,6 +492,20 @@ function wsTestFunc()
 	}
 	wsTest.send(JSON.stringify(json));
 }
+
+function showCreateTicket()
+{
+	document.getElementById("tickCreateUser").value = "";
+	document.getElementById("tickCreateSubject").value = "";
+	document.getElementById("tickCreateNotes").value = "";
+	jQuery("#createTicket").dialog({
+		width:650,
+		height:550
+		});
+	jQuery("#tickCreateUser").select2({
+		  data: Object.keys(userList)
+		});
+}
 //ticketTest();
 </script>
 <style>
@@ -553,12 +593,24 @@ padding:10px;
 {
 	margin:10px 15px;
 }
+#tickCreateNotes
+{
+	min-height:300px;
+}
 </style>
 </head>
 <body>
+<button class = "btn" onclick = "showCreateTicket();">Create Ticket</button><span id = "Greeting"></span>
 <div class="ticketOuterHeader"><span class="innerTicketHeader time" onclick = "sortTicketTableBy('Time');">Time</span><span class="innerTicketHeader custName" onclick = "sortTicketTableBy('Last Name','name');">Name</span><span class="innerTicketHeader description" onclick = "sortTicketTableBy('Description');">Description</span><span class="innerTicketHeader action" onclick = "sortTicketTableBy('Action');">Action</span><span class="innerTicketHeader assignment" onclick = "sortTicketTableBy('Assigned To');">Assigned To</span><span class="innerTicketHeader status" onclick = "sortTicketTableBy('Status','number');">Status</span><span class="innerTicketHeader device" onclick = "sortTicketTableBy('Device','number');">Device</span></div>
 <div id = "table">
 </div>
 <div id = "dialogDiv" style = "display:none"></div>
+<div id = "createTicket" style = "display:none">
+<select id = "tickCreateUser" class = "form-control" placeholder = "User"></select>
+<input id = "tickCreateSubject" class = "form-control" placeholder = "Subject">
+<label> Notes </label>
+<textarea id = "tickCreateNotes" class = "form-control" placeholder = "Notes"></textarea>
+<button class = "btn btn-primary">Create Ticket</button>
+</div>
 </body>
 </html>

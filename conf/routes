@@ -10,15 +10,16 @@ GET     /agents                     controllers.Application.listAgents
 GET     /tickets                    controllers.Application.listTickets
 
 GET     /ticketTypes                controllers.Application.getTicketTypes
+
 GET     /statusTypes                controllers.Application.getTicketStatusTypes
 
 GET     /wsTest                     controllers.Application.socket
 
 GET     /wsTester                   controllers.Application.wsTester
 
-GET     /test1                      controllers.Application.test1
+GET     /getSortedUsers             controllers.Application.getAllSortedUsers
 
-GET     /test2                      controllers.Application.test2
+GET     /getAdminInfo               controllers.Application.getAdminInfo
 
 POST    /loginService               controllers.Application.loginFunction
 
