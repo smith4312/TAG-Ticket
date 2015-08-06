@@ -3,7 +3,8 @@ package controllers
 import java.util
 import java.util.Date
 import java.sql.ResultSet
-import play.api.Play.current
+import _root_.slick.backend
+import _root_.slick.driver.PostgresDriver
 import play.api._
 import play.api.libs.json.Json.JsValueWrapper
 import play.api.mvc._
@@ -72,16 +73,16 @@ object UserRepository {
   @user the user to log in
   @password the password he is using to log in with
    */
-  def logIn(user: String, password: String): String = {
+  def logIn(user: String, password: String)(dbConfig: backend.DatabaseConfig[PostgresDriver]): String = {
 
     //Lets check the user is allowed to log in against the DB
-    val conn: java.sql.Connection = DB.getConnection();
+    val sess = dbConfig.db.createSession()
     var pstmt: java.sql.PreparedStatement = null;
     var rs: java.sql.ResultSet = null;
     var newCookie: String = "Not Allowed";
     try {
       var query: String = "Select id,access_level,last_name,first_name,office_location_id from agent where user_name = ? AND password = ?";
-      pstmt = conn.prepareStatement(query);
+      pstmt = sess.prepareStatement(query);
       pstmt.setString(1, user);
       pstmt.setString(2, password);
       rs = pstmt.executeQuery();
@@ -105,9 +106,7 @@ object UserRepository {
       }
     }
     finally {
-      if (!conn.isClosed()) {
-        conn.close();
-      }
+      sess.close()
       if (pstmt != null && !pstmt.isClosed()) {
         pstmt.close();
       }
