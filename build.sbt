@@ -12,7 +12,7 @@ libraryDependencies ++= Seq(
   ws,
   specs2 % Test
 )
-
+libraryDependencies += "org.flywaydb" % "flyway-core" % "3.2.1"
 libraryDependencies += "org.postgresql" % "postgresql" % "9.4-1200-jdbc4"
 
 resolvers += "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases"
