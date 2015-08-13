@@ -21,46 +21,48 @@ This is a singleton that contains all the logged in users
 */
 object UserRepository {
   //The Table of Logged In Users
-  val users: util.HashMap[String, AdminUser] = new util.HashMap[String, AdminUser]();
+  private val users: util.HashMap[String, AdminUser] = new util.HashMap[String, AdminUser]();
   //Last time we looked for expired cookies
-  var lastSweep = new Date();
+  private var lastSweep = new Date();
   /*
   Check if the user is logged in
   @user The user we are checking
   @cookieVal the value of his login cookie
    */
-  def isLoggedIn(user: String, cookieVal: String): Boolean = {
+  def isLoggedIn(userName: String, cookieVal: String): Boolean =
+  {
     //Check if the user is logged in and if this Cookie is a valid one of his cookies
-    if (users.containsKey(user)) {
-      var theUser: AdminUser = users.get(user);
-      if (theUser.checkCookie(cookieVal)) {
-        return true;
-      }
-    }
+    val isLoggedIn = if (users.containsKey(userName)) {
+      val theUser: AdminUser = users.get(userName);
+      (theUser.checkCookie(cookieVal))
+    } else false
     //If he is not logged in I don't mind hassling him a bit so now is a potential time to cleanup the cookies
-    try{
-      //don't care about a minor delay if not logged in so every 5 mintes cleat out unued cookies
-      var newDate = new Date();
-      //Check if we have done a sweep in the last 5 minutes
-      if(newDate.getTime - lastSweep.getTime() > (5*1000*60))
-      {
-        lastSweep = newDate;
-        // check each user for expired cookies
-        users.foreach(kv => kv._2.cleanCookies);
+    if(!isLoggedIn)
+    {
+      try{
+        //don't care about a minor delay if not logged in so every 5 mintes cleat out unued cookies
+        val newDate = new Date();
+        //Check if we have done a sweep in the last 5 minutes
+        if(newDate.getTime - lastSweep.getTime() > (5*1000*60))
+        {
+          lastSweep = newDate;
+          // check each user for expired cookies
+          users.foreach(kv => kv._2.cleanCookies);
+
+        }
+      }
+      catch {case e: Exception =>
+        println(e.getMessage)
 
       }
     }
-    catch{case e: Exception =>
-      println(e.getMessage)
-
-    }
-    return false;
+    isLoggedIn
   };
 
   def getUserInfo(user: String): Option[AdminUser] = {
     //Check if the user is logged in and if this Cookie is a valid one of his cookies
     if (users.containsKey(user)) {
-      var theUser: AdminUser = users.get(user);
+      val theUser: AdminUser = users.get(user);
       return Some(theUser);
     }
     return None;
@@ -73,7 +75,7 @@ object UserRepository {
   def logIn(user: String, password: String): String = {
 
     //Lets check the user is allowed to log in against the DB
-    var conn: java.sql.Connection = DB.getConnection();
+    val conn: java.sql.Connection = DB.getConnection();
     var pstmt: java.sql.PreparedStatement = null;
     var rs: java.sql.ResultSet = null;
     var newCookie: String = "Not Allowed";
@@ -86,7 +88,7 @@ object UserRepository {
       if (rs.next()) {
         //If the user has logged in previously update his info and set a new cookie
         if (users.containsKey(user)) {
-          var oldUser: AdminUser = users.get(user);
+          val oldUser: AdminUser = users.get(user);
           oldUser.password = password;
           oldUser.accessLevel = rs.getString("access_level");
           oldUser.fullName = rs.getString("first_name") + " " + rs.getString("last_name");
@@ -96,7 +98,7 @@ object UserRepository {
         }
         //Otherwise add his info to the repository
         else {
-          var newUser: AdminUser = new AdminUser(user, password, rs.getString("first_name") + " " + rs.getString("last_name"), rs.getString("access_level"),rs.getInt("office_location_id"),rs.getInt("id"));
+          val newUser: AdminUser = new AdminUser(user, password, rs.getString("first_name") + " " + rs.getString("last_name"), rs.getString("access_level"),rs.getInt("office_location_id"),rs.getInt("id"));
           users.put(user, newUser);
           newCookie = newUser.addCookie();
         }
@@ -124,7 +126,7 @@ An Object to define a Cookie
 @token the value of the cookie
  */
 class cookieItem{
-  var lastLogin: util.Date = new Date();
+  var lastSeen: util.Date = new Date();
   var token:String = null;
 }
 
@@ -144,7 +146,7 @@ case class AdminUser
  var ID:Int) {
   var lastLogin: util.Date = new Date();
   //A Map of all the cookies this user has (ie from multiple browsers)
-  var openCookies: util.HashMap[String,cookieItem] = new util.HashMap[String,cookieItem]();
+  val openCookies: util.HashMap[String,cookieItem] = new util.HashMap[String,cookieItem]();
 
   def getPassword(): String = {
     return password;
@@ -161,8 +163,8 @@ case class AdminUser
     //generate Cookie
     touch();
     //use the time so it is random
-    var newCookieVal: String = (new util.Date()).toGMTString() + userName;
-    newCookieVal = newCookieVal.replace(" ","");
+    var newCookieVal: String = System.currentTimeMillis() + userName;
+    newCookieVal = newCookieVal.replaceAll("[\\s;,=]","")//newCookieVal.replace(" ","");
     //TODO:need to encrypt it
     val newCookie:cookieItem = new cookieItem();
     openCookies.put(newCookieVal,newCookie);
@@ -172,11 +174,11 @@ case class AdminUser
   Go through all the users cookies and clean out the expired ones
    */
   def cleanCookies = {
-    var newDate: util.Date = new util.Date();
+    val newDate: util.Date = new util.Date();
     openCookies.foreach(kv =>
       try{
-        var myCookie = kv._2;
-        if(newDate.getTime() - myCookie.lastLogin.getTime() > (30 * 60 * 1000))
+        val myCookie = kv._2;
+        if(newDate.getTime() - myCookie.lastSeen.getTime() > (30 * 60 * 1000))
         {
           openCookies.remove(myCookie.token);
         }
@@ -191,12 +193,12 @@ case class AdminUser
   @cookieVal the value of the cookie we are checking
    */
   def checkCookie(cookieVal: String): Boolean = {
-    var newDate: util.Date = new util.Date();
+    val newDate: util.Date = new util.Date();
 
     if (openCookies.containsKey(cookieVal)) {
       val myCookie:cookieItem = openCookies.get(cookieVal);
       //If we have it but it's expired remove it and declare them not logged in
-      if(newDate.getTime() - myCookie.lastLogin.getTime() > (30 * 60 * 1000))
+      if(newDate.getTime() - myCookie.lastSeen.getTime() > (30 * 60 * 1000))
       {
         openCookies.remove(cookieVal);
         println("removing cookie "+cookieVal);
@@ -205,7 +207,7 @@ case class AdminUser
       else
       {
         //update the Cookies so it won't expire
-        myCookie.lastLogin = new util.Date();
+        myCookie.lastSeen = new util.Date();
       }
       return true;
     }
