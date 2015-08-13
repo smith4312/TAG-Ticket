@@ -32,11 +32,32 @@ wsTest.onmessage = function(event)
 function getTicketInfo()
 {
      var to = "http://"+window.location.hostname+":9000/ticketTypes";
-	 $.get(to,function(data){console.log(data); ticketTypes = data;});
+	 var cdl = new countDownLatch(2,function()
+	 {
+		var elem = document.getElementById("createTicket");
+		var lab1 = document.createElement("label");
+		lab1.innerHTML = "Assign To";
+		elem.appendChild(lab1);
+		elem.appendChild(createAgentSelect("newTickAssign"));
+		/*var lab2 = document.createElement("label");
+		lab2.innerHTML = "Initial Status";
+		elem.appendChild(lab2);
+		elem.appendChild(createTicketStatusSelect("newTickStatus"));*/
+		var lab3 = document.createElement("label");
+		lab3.innerHTML = "Ticket Type";
+		elem.appendChild(lab3);
+		elem.appendChild(createTicketTypeSelect("newTickType"));
+		var btn = document.createElement("button");
+		btn.className = "btn btn-primary";
+		btn.innerHTML = "Create Ticket";
+		btn.addEventListener("click",createTicket);
+		elem.appendChild(btn);
+	 });
+	 $.get(to,function(data){ ticketTypes = data;cdl.runFunction();});
 	 to = "http://"+window.location.hostname+":9000/statusTypes";
-	 $.get(to,function(data){console.log(data); ticketStatuses = data;});
+	 $.get(to,function(data){ ticketStatuses = data;});
 	 to = "http://"+window.location.hostname+":9000/agents";
-	 $.get(to,function(data){console.log(data); availabelAgents = data;});
+	 $.get(to,function(data){ availabelAgents = data;cdl.runFunction();});
 	 to = "http://"+window.location.hostname+":9000/getSortedUsers";
 	 $.get(to,function(data)
 	 {
@@ -44,6 +65,7 @@ function getTicketInfo()
 		{
 			var key = data[i].lastName+","+data[i].firstName+" p:"+data[i].phone+" m:"+data[i].mobile;
 			userList[key]=data[i];
+			//console.log(data[i]);
 		}
 		//console.log(Object.keys(userList));
 		
@@ -55,6 +77,19 @@ function getTicketInfo()
 		adminInfo = data;
 		document.getElementById("Greeting").innerHTML = "Hello "+adminInfo.fullName;
 	});
+}
+
+var countDownLatch = function(initial,func)
+{
+	this.num = initial;
+	this.runFunction = function()
+	{
+		this.num--;
+		if(this.num < 1)
+		{
+			func();
+		}
+	};
 }
 
 function createTicketStatusSelect(id)
@@ -89,10 +124,24 @@ function createAgentSelect(id)
 	return select1;
 }
 
+function createTicketTypeSelect(id)
+{
+	var select = document.createElement("select");
+	select.id = id;
+	for(var i = 0; i < ticketTypes.length;i++)
+	{
+		var opt = document.createElement("option");
+		opt.value = ticketTypes[i].id+"";
+		opt.innerHTML = ticketTypes[i].Name;
+		select.appendChild(opt);
+	}
+	return select;
+}
 document.addEventListener("DOMContentLoaded",getTicketInfo);
 
 function checkUpdates(ticket)
 {
+	console.log(ticket);
 	var id = ticket["ticket_id"];
 	console.log(JSON.stringify(ticket)+" "+id +" "+(ticketIDRegistry[id] != null));
 	var updated = false;
@@ -115,6 +164,16 @@ function checkUpdates(ticket)
 				}
 			}
 		}
+	}
+	else
+	{
+		ticketIDRegistry[id] = ticket;
+		ticketTable.primaryJSON.push(ticket);
+		if(ticketTable.viewJSON.indexOf(ticket) < 0)
+		{
+			ticketTable.viewJSON.push(ticket);
+		}
+		updated = true;
 	}
 	if(updated)
 	{
@@ -193,6 +252,7 @@ tickets.draw = function(position,viewMode,ticket)
 	}
 	if(viewMode == "table")
 	{
+		
 		var outer = document.createElement("div");
 		outer.className = "ticketOuter";
 		if(ticket.Priority == 1)
@@ -228,34 +288,42 @@ tickets.draw = function(position,viewMode,ticket)
 		outer.appendChild(span);
 		span = document.createElement("span");
 		var stat = "glyphicon glyphicon-folder-open";
-		if(ticket["Status"].toLowerCase().indexOf("open") >= 0)
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("open") >= 0)
 		{
 			stat = "glyphicon glyphicon-pencil";
 		}
-		if(ticket["Status"].toLowerCase().indexOf("closed") >= 0)
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("closed") >= 0)
 		{
 			stat = "glyphicon glyphicon-ok-sign";
 		}
-		if(ticket["Status"].toLowerCase().indexOf("cancel") >= 0)
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("cancel") >= 0)
 		{
 			stat = "glyphicon glyphicon-trash";
 		}
-		if(ticket["Status"].toLowerCase().indexOf("drop") >= 0)
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("drop") >= 0)
 		{
 			stat = "glyphicon glyphicon-circle-arrow-down";
 		}
-		if(ticket["Status"].toLowerCase().indexOf("pick") >= 0)
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("pick") >= 0)
 		{
 			stat = "glyphicon glyphicon-thumbs-up";
 		}
-		if(ticket["Status"].toLowerCase().indexOf("hold") >= 0)
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("hold") >= 0)
 		{
 			stat = "glyphicon glyphicon-lock";
+		}
+		if(!ticket["Status"])
+		{
+			stat = "";
 		}
 		span.className = "innerTicket status "+ticket["Status"]+" "+stat;
 		outer.appendChild(span);
 		var dev = "glyphicon glyphicon-floppy-disk";
-		if(ticket["Device"].toLowerCase().indexOf("phone") >= 0)
+		if(!ticket["Device"])
+		{
+			dev = "";
+		}
+		if(ticket["Device"] && ticket["Device"].toLowerCase().indexOf("phone") >= 0)
 		{
 			dev ="glyphicon glyphicon-phone";
 		}
@@ -499,12 +567,35 @@ function showCreateTicket()
 	document.getElementById("tickCreateSubject").value = "";
 	document.getElementById("tickCreateNotes").value = "";
 	jQuery("#createTicket").dialog({
-		width:650,
+		width:550,
 		height:550
 		});
 	jQuery("#tickCreateUser").select2({
 		  data: Object.keys(userList)
 		});
+		
+}
+
+function createTicket()
+{
+	var json =
+	{
+		userID:userList[jQuery("#tickCreateUser").val()].id,
+		subject:document.getElementById("tickCreateSubject").value,
+		type:parseInt(document.getElementById("newTickType").value),
+		office:adminInfo.officeID,
+		notes:document.getElementById("tickCreateNotes").value,
+		agent:adminInfo.ID,
+		assign:parseInt(document.getElementById("newTickAssign").value),
+		priority:0,
+		account:userList[jQuery("#tickCreateUser").val()].account
+	};
+	var func = function(data)
+	{
+		jQuery("#createTicket").dialog('close');
+	};
+	var to = "http://localhost:9000/createTicket";
+	runJSONAjax(to,json,func);
 }
 //ticketTest();
 </script>
@@ -597,6 +688,14 @@ padding:10px;
 {
 	min-height:300px;
 }
+#createTicket > label
+{
+	width:35%;
+}
+#newTickAssign,#newTickType
+{
+	width:63%;
+}
 </style>
 </head>
 <body>
@@ -610,7 +709,7 @@ padding:10px;
 <input id = "tickCreateSubject" class = "form-control" placeholder = "Subject">
 <label> Notes </label>
 <textarea id = "tickCreateNotes" class = "form-control" placeholder = "Notes"></textarea>
-<button class = "btn btn-primary">Create Ticket</button>
+<!--<button class = "btn btn-primary" onclick = "createTicketJSON();">Create Ticket</button>-->
 </div>
 </body>
 </html>

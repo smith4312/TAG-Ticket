@@ -2,7 +2,7 @@ package controllers
 
 import java.util
 import java.util.Date
-import java.sql.ResultSet
+import java.sql.{Timestamp, ResultSet, Statement}
 import play.api.Play.current
 import play.api._
 import play.api.libs.json.Json.JsValueWrapper
@@ -14,7 +14,6 @@ import scala.collection.JavaConversions._
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
-import java.sql.Statement
 
 /*
 Create an action that authenticates the user before allowing login
@@ -90,13 +89,13 @@ class Application extends Controller {
       |   FROM ticket t INNER JOIN
       |    account a ON (t.account_id = a.id) INNER JOIN
       |    person u ON (t.person_id = u.id) INNER JOIN
-      |    person_device d ON (t.person_device_id = d.id) INNER JOIN
-      |    device de ON (d.device_id = de.id) INNER JOIN
       |    ticket_action ta ON (t.action_id = ta.id) INNER JOIN
       |    ticket_status s ON (t.status_id = s.id) INNER JOIN
       |    office_location l ON (t.office_location_id = l.id ) Left JOIN
       |    agent ag ON (t.assigned_agent_id = ag.id) INNER JOIN
-      |    agent cg ON (t.created_agent_id = cg.id)""".stripMargin;
+      |    agent cg ON (t.created_agent_id = cg.id) LEFT JOIN
+      |    person_device d ON (t.person_device_id = d.id) LEFT JOIN
+      |    device de ON (d.device_id = de.id) """.stripMargin;
 
   def index = Action {
     Ok
@@ -141,7 +140,12 @@ class Application extends Controller {
       val stmt = conn.createStatement
       val rs = stmt.executeQuery(query)
       while (rs.next()) {
-        jsonBuffer += rsToJsRow(rs)
+        try {
+          jsonBuffer += rsToJsRow(rs)
+        }
+        catch{
+          case e:Exception => println(e.getMessage)
+        }
       }
       rs.close()
       stmt.close()
@@ -161,7 +165,12 @@ class Application extends Controller {
     try {
       val rs = query.executeQuery();
       while (rs.next()) {
-        jsonBuffer += rsToJsRow(rs)
+        try {
+          jsonBuffer += rsToJsRow(rs)
+        }
+        catch{
+          case e:Exception => println(e.getMessage)
+        }
       }
       if(!rs.isClosed()) {
         rs.close();
@@ -195,29 +204,30 @@ class Application extends Controller {
   def listTickets = LoggedInAction {
 
     val query = vTicketBase;
-    val json = queryToJson(query, (rs: ResultSet)=>
-      Json.obj(
-        "ticket_id" -> rs.getInt("TICKET_ID"),
-        "version" -> rs.getInt("VERSION"),
-        "Action" -> rs.getString("ACTION"),
-        "Description" -> rs.getString("DESCRIPTION"),
-        "Status"  -> rs.getString("STATUS"),
-        "Account_id" -> rs.getInt("ACCOUNT_ID"),
-        "Person" -> rs.getInt("PERSON_ID"),
-        "First Name" -> rs.getString("FIRST_NAME"),
-        "Last Name" -> rs.getString("LAST_NAME"),
-        "Device_id" -> rs.getInt("PERSON_DEVICE_ID"),
-        "Device" -> rs.getString("DEVICE"),
-        "Office_id" -> rs.getInt("OFFICE_LOCATION_ID"),
-        "Office" -> rs.getString("LOCATION"),
-        "Created By" -> rs.getString("CREATED_BY"),
-        "Assigned To" -> rs.getString("ASSIGNED_TO"),
-        "Notes" -> rs.getString("NOTES"),
-        "Time" -> rs.getTimestamp("TIME"),
-        "Priority" -> rs.getInt("PRIORITY")
+      val json = queryToJson(query, (rs: ResultSet) =>
+        Json.obj(
+          "ticket_id" -> rs.getInt("TICKET_ID"),
+          "version" -> rs.getInt("VERSION"),
+          "Action" -> rs.getString("ACTION"),
+          "Description" -> rs.getString("DESCRIPTION"),
+          "Status" -> rs.getString("STATUS"),
+          "Account_id" -> rs.getInt("ACCOUNT_ID"),
+          "Person" -> rs.getInt("PERSON_ID"),
+          "First Name" -> rs.getString("FIRST_NAME"),
+          "Last Name" -> rs.getString("LAST_NAME"),
+          "Device_id" -> rs.getInt("PERSON_DEVICE_ID"),
+          "Device" -> rs.getString("DEVICE"),
+          "Office_id" -> rs.getInt("OFFICE_LOCATION_ID"),
+          "Office" -> rs.getString("LOCATION"),
+          "Created By" -> rs.getString("CREATED_BY"),
+          "Assigned To" -> rs.getString("ASSIGNED_TO"),
+          "Notes" -> rs.getString("NOTES"),
+          "Time" -> rs.getTimestamp("TIME"),
+          "Priority" -> rs.getInt("PRIORITY")
+        )
       )
-    )
-    Ok(json)
+      Ok(json);
+
 
   }
 
@@ -381,9 +391,10 @@ class Application extends Controller {
     val agent = (json \ "agent").as[Int];
     val assign = (json \ "assign").as[Int];
     val priority = (json \ "priority").as[Int];
+    val account = (json \ "account").as[Int];
     var pstmt:java.sql.PreparedStatement = null;
     var success:Boolean = false;
-    val query:String = "Insert Into ticket (person_id,description,action_id,office_location_id,notes,created_agent_id,assigned_agent_id,priority) VALUES (?,?,?,?,?,?,?,?);";
+    val query:String = "Insert Into ticket (person_id,description,action_id,office_location_id,notes,created_agent_id,assigned_agent_id,priority,account_id,version,status_id,time) VALUES (?,?,?,?,?,?,?,?,?,1,1,?);";
     var conn = DB.getConnection();
     try{
       pstmt = conn.prepareStatement(query,Statement.RETURN_GENERATED_KEYS);
@@ -393,8 +404,17 @@ class Application extends Controller {
       pstmt.setInt(4,office);
       pstmt.setString(5,notes);
       pstmt.setInt(6,agent);
-      pstmt.setInt(7,assign);
+      if(assign >= 0)
+      {
+        pstmt.setInt(7,assign);
+      }
+      else
+      {
+        pstmt.setNull(7,java.sql.Types.NULL);
+      }
       pstmt.setInt(8,priority);
+      pstmt.setInt(9,account);
+      pstmt.setTimestamp(10,new java.sql.Timestamp(new Date().getTime))
       var result = pstmt.executeUpdate();
       var keys = pstmt.getGeneratedKeys();
       keys.next();

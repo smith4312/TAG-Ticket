@@ -21,7 +21,7 @@ This is a singleton that contains all the logged in users
 */
 object UserRepository {
   //The Table of Logged In Users
-  var users: util.HashMap[String, AdminUser] = new util.HashMap[String, AdminUser]();
+  val users: util.HashMap[String, AdminUser] = new util.HashMap[String, AdminUser]();
   //Last time we looked for expired cookies
   var lastSweep = new Date();
   /*
@@ -56,6 +56,7 @@ object UserRepository {
     }
     return false;
   };
+
   def getUserInfo(user: String): Option[AdminUser] = {
     //Check if the user is logged in and if this Cookie is a valid one of his cookies
     if (users.containsKey(user)) {
