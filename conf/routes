@@ -7,6 +7,8 @@ GET     /                           controllers.Application.index
 
 GET     /agents                     controllers.Application.listAgents
 
+GET     /offices                    controllers.Application.listOffices
+
 GET     /tickets                    controllers.Application.listTickets
 
 GET     /ticketTypes                controllers.Application.getTicketTypes

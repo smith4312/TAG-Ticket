@@ -196,6 +196,22 @@ class Application extends Controller {
     Ok(json)
   }
 
+  def listOffices = LoggedInAction {
+    val query = "SELECT id,location_name,city,country,phone,address,hours FROM office_location"
+    val json = queryToJson(query, (rs: ResultSet) =>
+      Json.obj(
+        "id" -> rs.getInt("id"),
+        "name" -> rs.getString("location_name"),
+        "city" -> rs.getString("city"),
+        "country" -> rs.getString("country"),
+        "phone" -> rs.getString("phone"),
+        "address" -> rs.getString("address"),
+        "hours" -> rs.getString("hours")
+      )
+    )
+    Ok(json)
+  }
+
 
   //TODO we want to take some parameters for this call
   // - Office location
@@ -203,39 +219,22 @@ class Application extends Controller {
   // - can these be
   def listTickets = LoggedInAction {
 
-    val query = vTicketBase;
-      val json = queryToJson(query, (rs: ResultSet) =>
-        Json.obj(
-          "ticket_id" -> rs.getInt("TICKET_ID"),
-          "version" -> rs.getInt("VERSION"),
-          "Action" -> rs.getString("ACTION"),
-          "Description" -> rs.getString("DESCRIPTION"),
-          "Status" -> rs.getString("STATUS"),
-          "Account_id" -> rs.getInt("ACCOUNT_ID"),
-          "Person" -> rs.getInt("PERSON_ID"),
-          "First Name" -> rs.getString("FIRST_NAME"),
-          "Last Name" -> rs.getString("LAST_NAME"),
-          "Device_id" -> rs.getInt("PERSON_DEVICE_ID"),
-          "Device" -> rs.getString("DEVICE"),
-          "Office_id" -> rs.getInt("OFFICE_LOCATION_ID"),
-          "Office" -> rs.getString("LOCATION"),
-          "Created By" -> rs.getString("CREATED_BY"),
-          "Assigned To" -> rs.getString("ASSIGNED_TO"),
-          "Notes" -> rs.getString("NOTES"),
-          "Time" -> rs.getTimestamp("TIME"),
-          "Priority" -> rs.getInt("PRIORITY")
-        )
-      )
+    val json = getTicketWithWhere("",null);
       Ok(json);
 
 
   }
 
-  def getTicketById(tickID:Int) : JsArray = {
+  def getTicketWithWhere(whereClause:String,vals:Seq[Object]) : JsArray = {
     val conn:java.sql.Connection = DB.getConnection();
-    var query = vTicketBase+" WHERE t.id = ?";
+    var query = vTicketBase+whereClause;
     var pstmt: java.sql.PreparedStatement = conn.prepareStatement(query);
-    pstmt.setInt(1,tickID);
+    if(vals != null)
+    {
+      for((v, i) <- vals.zipWithIndex) {
+        pstmt.setObject(i+1,v);
+      }
+    }
     val json = queryToJson(pstmt, conn, (rs: ResultSet) =>
       Json.obj(
         "ticket_id" -> rs.getInt("TICKET_ID"),
@@ -260,6 +259,11 @@ class Application extends Controller {
     )
     dbCleanup(pstmt,conn);
     return json;
+  }
+
+    def getTicketById(tickID:Integer) : JsArray = {
+      val params: Seq[AnyRef] = Seq(tickID: AnyRef)
+      getTicketWithWhere(" WHERE t.id = ?",params);
   }
 
   //check and close if open DB relevant items
@@ -322,6 +326,14 @@ class Application extends Controller {
     if(newField == "status")
     {
       var query:String = "update ticket set status_id = ?, time = time where id = ?";
+      pstmt = conn.prepareStatement(query);
+      pstmt.setInt(1,newValue.toInt);
+      pstmt.setInt(2,tickID);
+    }
+
+    if(newField == "office")
+    {
+      var query:String = "update ticket set office_location = ?, time = time where id = ?";
       pstmt = conn.prepareStatement(query);
       pstmt.setInt(1,newValue.toInt);
       pstmt.setInt(2,tickID);
@@ -539,11 +551,8 @@ Ok(outputJSON)
 
   def findAccount = TODO
 
-  //def createTicket = TODO
 
   def getAccount = TODO
-
-  def updateTicket = TODO
 
   def createAccount = TODO
 

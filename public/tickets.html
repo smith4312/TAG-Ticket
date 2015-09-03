@@ -16,6 +16,7 @@ var wsTest = new WebSocket(wsTestURL);
 var ticketIDRegistry;
 var ticketTypes;
 var availabelAgents;
+var officeInfo;
 var ticketStatuses;
 var adminInfo;
 var userList = new Array();
@@ -32,21 +33,22 @@ wsTest.onmessage = function(event)
 function getTicketInfo()
 {
      var to = "http://"+window.location.hostname+":9000/ticketTypes";
-	 var cdl = new countDownLatch(2,function()
+	 var cdl = new countDownLatch(3,function()
 	 {
 		var elem = document.getElementById("createTicket");
 		var lab1 = document.createElement("label");
 		lab1.innerHTML = "Assign To";
 		elem.appendChild(lab1);
 		elem.appendChild(createAgentSelect("newTickAssign"));
-		/*var lab2 = document.createElement("label");
-		lab2.innerHTML = "Initial Status";
+		var lab2 = document.createElement("label");
+		lab2.innerHTML = "Office";
 		elem.appendChild(lab2);
-		elem.appendChild(createTicketStatusSelect("newTickStatus"));*/
+		elem.appendChild(createOfficeSelect("newOfficeAssignment"));
 		var lab3 = document.createElement("label");
 		lab3.innerHTML = "Ticket Type";
 		elem.appendChild(lab3);
 		elem.appendChild(createTicketTypeSelect("newTickType"));
+		
 		var btn = document.createElement("button");
 		btn.className = "btn btn-primary";
 		btn.innerHTML = "Create Ticket";
@@ -58,6 +60,8 @@ function getTicketInfo()
 	 $.get(to,function(data){ ticketStatuses = data;});
 	 to = "http://"+window.location.hostname+":9000/agents";
 	 $.get(to,function(data){ availabelAgents = data;cdl.runFunction();});
+	 to = "http://"+window.location.hostname+":9000/offices";
+	 $.get(to,function(data){ officeInfo = data;cdl.runFunction();});
 	 to = "http://"+window.location.hostname+":9000/getSortedUsers";
 	 $.get(to,function(data)
 	 {
@@ -92,18 +96,28 @@ var countDownLatch = function(initial,func)
 	};
 }
 
-function createTicketStatusSelect(id)
+function createGenericSelect(id,obj,valField,textField)
 {
 	var select = document.createElement("select");
 	select.id = id;
-	for(var i = 0; i < ticketStatuses.length;i++)
+	for(var i = 0; i < obj.length;i++)
 	{
 		var opt = document.createElement("option");
-		opt.value = ticketStatuses[i].id+"";
-		opt.innerHTML = ticketStatuses[i].Status;
+		opt.value = (obj[i])[valField]+"";
+		opt.innerHTML = (obj[i])[textField];
 		select.appendChild(opt);
 	}
 	return select;
+}
+
+function createTicketStatusSelect(id)
+{
+	return createGenericSelect(id,ticketStatuses,"id","Status");
+}
+
+function createOfficeSelect(id)
+{
+	return createGenericSelect(id,officeInfo,"id","name");
 }
 
 function createAgentSelect(id)
@@ -126,16 +140,7 @@ function createAgentSelect(id)
 
 function createTicketTypeSelect(id)
 {
-	var select = document.createElement("select");
-	select.id = id;
-	for(var i = 0; i < ticketTypes.length;i++)
-	{
-		var opt = document.createElement("option");
-		opt.value = ticketTypes[i].id+"";
-		opt.innerHTML = ticketTypes[i].Name;
-		select.appendChild(opt);
-	}
-	return select;
+	return createGenericSelect(id,ticketTypes,"id","Name");
 }
 document.addEventListener("DOMContentLoaded",getTicketInfo);
 
@@ -568,7 +573,7 @@ function showCreateTicket()
 	document.getElementById("tickCreateNotes").value = "";
 	jQuery("#createTicket").dialog({
 		width:550,
-		height:550
+		height:600
 		});
 	jQuery("#tickCreateUser").select2({
 		  data: Object.keys(userList)
@@ -692,7 +697,7 @@ padding:10px;
 {
 	width:35%;
 }
-#newTickAssign,#newTickType
+#newTickAssign,#newTickType,#newOfficeAssignment
 {
 	width:63%;
 }
