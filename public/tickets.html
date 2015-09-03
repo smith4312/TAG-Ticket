@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="http://code.jquery.com/jquery-latest.min.js"></script>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+		<!-- Optional theme -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap-theme.min.css">
+<script src="http://admin.usanativ.com:8080/webservices2/webresources/portal/a/js/genericTables2.js"></script>
+<script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
+<link rel="stylesheet" type="text/css" href="http://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+<link href="//cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/css/select2.min.css" rel="stylesheet" />
+<script src="//cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/js/select2.min.js"></script>
+<script>
+var wsTestURL = "ws://localhost:9000/wsTest";
+var wsTest = new WebSocket(wsTestURL);
+var ticketIDRegistry;
+var ticketTypes;
+var availabelAgents;
+var officeInfo;
+var ticketStatuses;
+var adminInfo;
+var userList = new Array();
+wsTest.onmessage = function(event)
+{
+	var info = JSON.parse(event.data);
+	console.log(info);
+	if(info.Action == "update")
+	{
+		checkUpdates(info.message[0]);
+	}
+}
+
+function getTicketInfo()
+{
+     var to = "http://"+window.location.hostname+":9000/ticketTypes";
+	 var cdl = new countDownLatch(3,function()
+	 {
+		var elem = document.getElementById("createTicket");
+		var lab1 = document.createElement("label");
+		lab1.innerHTML = "Assign To";
+		elem.appendChild(lab1);
+		elem.appendChild(createAgentSelect("newTickAssign"));
+		var lab2 = document.createElement("label");
+		lab2.innerHTML = "Office";
+		elem.appendChild(lab2);
+		elem.appendChild(createOfficeSelect("newOfficeAssignment"));
+		var lab3 = document.createElement("label");
+		lab3.innerHTML = "Ticket Type";
+		elem.appendChild(lab3);
+		elem.appendChild(createTicketTypeSelect("newTickType"));
+		
+		var btn = document.createElement("button");
+		btn.className = "btn btn-primary";
+		btn.innerHTML = "Create Ticket";
+		btn.addEventListener("click",createTicket);
+		elem.appendChild(btn);
+	 });
+	 $.get(to,function(data){ ticketTypes = data;cdl.runFunction();});
+	 to = "http://"+window.location.hostname+":9000/statusTypes";
+	 $.get(to,function(data){ ticketStatuses = data;});
+	 to = "http://"+window.location.hostname+":9000/agents";
+	 $.get(to,function(data){ availabelAgents = data;cdl.runFunction();});
+	 to = "http://"+window.location.hostname+":9000/offices";
+	 $.get(to,function(data){ officeInfo = data;cdl.runFunction();});
+	 to = "http://"+window.location.hostname+":9000/getSortedUsers";
+	 $.get(to,function(data)
+	 {
+		for(var i = 0; i < data.length;i++)
+		{
+			var key = data[i].lastName+","+data[i].firstName+" p:"+data[i].phone+" m:"+data[i].mobile;
+			userList[key]=data[i];
+			//console.log(data[i]);
+		}
+		//console.log(Object.keys(userList));
+		
+	 });
+	 to = "http://"+window.location.hostname+":9000/getAdminInfo";
+	 $.get(to,function(data)
+	 {
+		console.log(data);
+		adminInfo = data;
+		document.getElementById("Greeting").innerHTML = "Hello "+adminInfo.fullName;
+	});
+}
+
+var countDownLatch = function(initial,func)
+{
+	this.num = initial;
+	this.runFunction = function()
+	{
+		this.num--;
+		if(this.num < 1)
+		{
+			func();
+		}
+	};
+}
+
+function createGenericSelect(id,obj,valField,textField)
+{
+	var select = document.createElement("select");
+	select.id = id;
+	for(var i = 0; i < obj.length;i++)
+	{
+		var opt = document.createElement("option");
+		opt.value = (obj[i])[valField]+"";
+		opt.innerHTML = (obj[i])[textField];
+		select.appendChild(opt);
+	}
+	return select;
+}
+
+function createTicketStatusSelect(id)
+{
+	return createGenericSelect(id,ticketStatuses,"id","Status");
+}
+
+function createOfficeSelect(id)
+{
+	return createGenericSelect(id,officeInfo,"id","name");
+}
+
+function createAgentSelect(id)
+{
+	var select1 = document.createElement("select");
+	select1.id = id;
+	var opt = document.createElement("option");
+	opt.value = "-1";
+	opt.innerHTML = "Unassigned";
+	select1.appendChild(opt);
+	for(var i = 0; i < availabelAgents.length;i++)
+	{
+		var opt = document.createElement("option");
+		opt.value = availabelAgents[i].id+"";
+		opt.innerHTML = availabelAgents[i].firstName + "&nbsp;"+availabelAgents[i].lastName;
+		select1.appendChild(opt);
+	}
+	return select1;
+}
+
+function createTicketTypeSelect(id)
+{
+	return createGenericSelect(id,ticketTypes,"id","Name");
+}
+document.addEventListener("DOMContentLoaded",getTicketInfo);
+
+function checkUpdates(ticket)
+{
+	console.log(ticket);
+	var id = ticket["ticket_id"];
+	console.log(JSON.stringify(ticket)+" "+id +" "+(ticketIDRegistry[id] != null));
+	var updated = false;
+	if(ticketIDRegistry[id] != null)
+	{
+		for(var key in ticketIDRegistry[id])
+		{
+			if(ticketIDRegistry[id].hasOwnProperty(key))
+			{
+				try{
+					if(ticketIDRegistry[id][key] != ticket[key])
+					{
+						ticketIDRegistry[id][key] = ticket[key];
+						updated = true;
+					}
+				}
+				catch(e)
+				{
+					console.log(e.message);
+				}
+			}
+		}
+	}
+	else
+	{
+		ticketIDRegistry[id] = ticket;
+		ticketTable.primaryJSON.push(ticket);
+		if(ticketTable.viewJSON.indexOf(ticket) < 0)
+		{
+			ticketTable.viewJSON.push(ticket);
+		}
+		updated = true;
+	}
+	if(updated)
+	{
+		console.log("updating");
+		ticketTable.displayTable("table","table",ticketTable);
+	}
+}
+function changeTableData(data)
+{
+	if(ticketTable == null)
+	{
+		ticketTable = new genericTable(data,tickets);
+	}
+	else
+	{
+		ticketTable.setTable = data;
+	}
+	ticketIDRegistry = new Array;
+	for(var i = 0; i < data.length;i++)
+	{
+		ticketIDRegistry[data[i].ticket_id] = data[i];
+	}
+}
+function ticketTest(){
+
+var to = "http://localhost:9000/tickets";
+var func = function(data)
+{
+	try{
+	//	console.log(JSON.stringify(data));
+		if(data.action && data.action == "redirect")
+		{
+			window.location = data.location+"&url="+encodeURIComponent(window.location.pathname);
+		}
+		changeTableData(data);
+		ticketTable.displayTable("table","table",ticketTable);
+
+	}
+	catch(e)
+	{
+		document.body.innerHTML = data;
+	}
+}
+
+	runGETJSON(to,func);
+}
+
+function sortTicketTableBy(type,sortType)
+{
+	ticketTable.sort(type,null,sortType);
+	console.log(type);
+	ticketTable.displayTable("table","table",ticketTable);
+}
+
+
+function runGETJSON(to,func)
+{
+$.ajax
+	({
+	type:"GET",
+	cache:false,
+	url:to,
+	success:func,
+	contentType: "application/json",
+	dataType: "json"
+	});
+}
+
+var ticketTable;
+var tickets = new elementItem();
+tickets.draw = function(position,viewMode,ticket)
+{
+	if(ticket == null)
+	{
+		ticket = this.viewJSON[position];
+	}
+	if(viewMode == "table")
+	{
+		
+		var outer = document.createElement("div");
+		outer.className = "ticketOuter";
+		if(ticket.Priority == 1)
+		{
+		    outer.className+=" elevated";
+		}
+		if(ticket.Priority > 1)
+		{
+		    outer.className+=" emergency";
+		}
+		var span = document.createElement("span");
+		//span.className = "innerTicket id";
+		span.className = "innerTicket time";
+	//	span.innerHTML = ticket["ticket_id"];
+		var d = new Date(ticket["Time"]);
+		span.innerHTML = d.toDateString()+"<br>"+d.toLocaleTimeString();
+		outer.appendChild(span);
+		span = document.createElement("span");
+		span.className = "innerTicket custName";
+		span.innerHTML = ticket["Last Name"]+", "+ticket["First Name"];
+		outer.appendChild(span);
+		span = document.createElement("span");
+		span.className = "innerTicket description";
+		span.innerHTML = ticket["Description"];
+		outer.appendChild(span);
+		span = document.createElement("span");
+		span.className = "innerTicket action";
+		span.innerHTML = ticket["Action"];
+		outer.appendChild(span);
+		span = document.createElement("span");
+		span.className = "innerTicket assignment";
+		span.innerHTML = ticket["Assigned To"];
+		outer.appendChild(span);
+		span = document.createElement("span");
+		var stat = "glyphicon glyphicon-folder-open";
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("open") >= 0)
+		{
+			stat = "glyphicon glyphicon-pencil";
+		}
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("closed") >= 0)
+		{
+			stat = "glyphicon glyphicon-ok-sign";
+		}
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("cancel") >= 0)
+		{
+			stat = "glyphicon glyphicon-trash";
+		}
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("drop") >= 0)
+		{
+			stat = "glyphicon glyphicon-circle-arrow-down";
+		}
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("pick") >= 0)
+		{
+			stat = "glyphicon glyphicon-thumbs-up";
+		}
+		if(ticket["Status"] && ticket["Status"].toLowerCase().indexOf("hold") >= 0)
+		{
+			stat = "glyphicon glyphicon-lock";
+		}
+		if(!ticket["Status"])
+		{
+			stat = "";
+		}
+		span.className = "innerTicket status "+ticket["Status"]+" "+stat;
+		outer.appendChild(span);
+		var dev = "glyphicon glyphicon-floppy-disk";
+		if(!ticket["Device"])
+		{
+			dev = "";
+		}
+		if(ticket["Device"] && ticket["Device"].toLowerCase().indexOf("phone") >= 0)
+		{
+			dev ="glyphicon glyphicon-phone";
+		}
+		span = document.createElement("span");
+		span.className = "innerTicket device "+dev;
+		span.addEventListener("click",showDevices(ticket));
+		outer.appendChild(span);
+		outer.addEventListener("click",showTicket(ticket));
+		return outer;
+		
+	}
+	if(viewMode == "popUp")
+	{
+		var div = document.createElement("div");
+		var info = document.createElement("div");
+		info.id = "dialogInfo";
+		div.appendChild(info);
+		addInfoItem("ID",ticket["ticket_id"],info);
+		var d = new Date(ticket["Time"]);
+		addInfoItem("Time",(d.toDateString()+" "+d.toLocaleTimeString()),info);
+		addInfoItem("Office",ticket["Office"],info);
+		addInfoItem("Assigned To",ticket["Assigned To"],info);
+		addInfoItem("Status",ticket["Status"],info);
+		var buttonDiv = document.createElement("div");
+		buttonDiv.id = "dialogButtons";
+		div.appendChild(buttonDiv);
+	/*	var but1 = document.createElement("button");
+		but1.className = "btn btn-primary";
+		but1.innerHTML = "Assign To Me";
+		but1.addEventListener("click",function(){alert("hi");});
+		buttonDiv.appendChild(but1);
+		var but2 = document.createElement("button");
+		but2.className = "btn btn-primary";
+		but2.innerHTML = "Close";
+		but2.addEventListener("click",updateStatusOnTicket("5",ticket["ticket_id"]));
+		buttonDiv.appendChild(but2);
+		var but3 = document.createElement("button");
+		but3.className = "btn btn-primary";
+		but3.innerHTML = "Cancel";
+		but3.addEventListener("click",updateStatusOnTicket("6",ticket["ticket_id"]));*/
+		buttonDiv.appendChild(createTicketStatusSelect("assignStatusSelect"));
+		var but2 = document.createElement("button");
+		but2.className = "btn btn-primary";
+		but2.innerHTML = "Set Status";
+		but2.addEventListener("click",updateStatusOnTicket("assignStatusSelect",ticket["ticket_id"]));
+		buttonDiv.appendChild(but2);
+		buttonDiv.appendChild(createAgentSelect("assignAgentSelect"));
+		var but3 = document.createElement("button");
+		but3.className = "btn btn-primary";
+		but3.innerHTML = "Assign";
+		but3.addEventListener("click",updateAgentOnTicket("assignAgentSelect",ticket["ticket_id"]));
+		buttonDiv.appendChild(but3);
+		var notes = document.createElement("div");
+		notes.id = "dialogNotes";
+		div.appendChild(notes);
+		var notesText = document.createElement("textarea");
+		notesText.value = ticket["Notes"];
+		notes.appendChild(notesText);
+		var but4 = document.createElement("button");
+		but4.className = "btn btn-primary";
+		but4.innerHTML = "Update Notes";
+		but4.addEventListener("click",updateNotesOnTicket(notesText,ticket["ticket_id"]));
+		notes.appendChild(but4);
+		return div;
+	}
+}
+
+function updateNotesOnTicket(notes,ticketID)
+{
+	return function()
+	{
+	    var json = {newField:"notes",newInfo:notes.value,tickID:ticketID};
+		var func = function(data)
+		{
+			jQuery("#dialogDiv").dialog('close');
+		};
+		var to = "http://localhost:9000/updateTickInfo";
+		runJSONAjax(to,json,func);
+	}
+}
+
+function updateStatusOnTicket(statusID,ticketID)
+{
+	return function()
+	{
+	    var status = document.getElementById(statusID).value;
+		var json = {newField:"status",newInfo:status,tickID:ticketID};
+		var func = function(data)
+		{
+			jQuery("#dialogDiv").dialog('close');
+		};
+		var to = "http://localhost:9000/updateTickInfo";
+		runJSONAjax(to,json,func);
+	}
+}
+
+function updateAgentOnTicket(agentSelectID,ticketID)
+{
+	return function()
+	{
+	    var agentID = document.getElementById(agentSelectID).value;
+		//alert(document.getElementById(agentSelectID).value);
+		var json = {newField:"assignment",newInfo:agentID,tickID:ticketID};
+		var func = function(data)
+		{
+			jQuery("#dialogDiv").dialog('close');
+		};
+		var to = "http://localhost:9000/updateTickInfo";
+	//	console.log(document.getElementById(agentSelectID).value+"  "+JSON.stringify(json)+"  "+agentSelectID);
+		runJSONAjax(to,json,func);
+	}
+}
+
+function addInfoItem(label,info,elem)
+{
+	var lab = document.createElement("label");
+	lab.innerHTML = label;
+	elem.appendChild(lab);
+	var infoSpan = document.createElement("span");
+	infoSpan.innerHTML = info;
+	elem.appendChild(infoSpan);
+}
+
+function showDevices(ticket)
+{
+	return function(event)
+	{
+		event = event || window.event;
+		event.preventDefault();
+		event.stopPropagation();
+		var json = {id:ticket.Person};
+		console.log(JSON.stringify(json));
+		document.getElementById("dialogDiv").innerHTML = "Please Wait...";
+		jQuery("#dialogDiv").dialog({
+		width:650,
+		height:650
+		});
+		console.log("got here");
+		var func = function(data)
+		{
+			console.log(JSON.stringify(data));
+			var elem = document.getElementById("dialogDiv");
+			elem.innerHTML = "";
+			for(var i =0;i < data.length;i++)
+			{
+				var button = document.createElement("button");
+				button.innerHTML = data[i].deviceType+" "+data[i].deviceModel;
+				button.addEventListener("click",deviceButtonClick(data[i]));
+				elem.appendChild(button);
+			}
+			var div = document.createElement("div");
+			div.id = "deviceDetails";
+			elem.appendChild(div);
+		}
+		var to = "http://localhost:9000/getPersonalDevices";
+		runJSONAjax(to,json,func);
+	}
+}
+
+tickets.sort = sortFunction;
+function sortFunction(type,reverse,sortType){
+	if(sortType == 'boolean')
+	{
+		var func = function(elem1,elem2)
+		{
+			if(!elem2[type] && elem1[type])
+			{
+				return reverse;
+			}
+			return !reverse;
+		};
+		return func;
+	}
+	if(sortType == 'name')
+	{
+		var func = function(elem1,elem2)
+		{
+			if(elem2["Last Name"]+" "+elem2["First Name"] < elem1["Last Name"]+" "+elem1["First Name"])
+			{
+				return reverse;
+			}
+			return !reverse;
+		};
+		return func;
+	}
+	var func = function(elem1,elem2)
+	{
+	//	console.log(":"+elem2[type] +":"+ elem1[type]+":");
+		if(elem2[type] < elem1[type])
+		{
+			return reverse;
+		}
+		return !reverse;
+	};
+	return func;
+}
+
+
+function deviceButtonClick(device)
+{
+	return function()
+	{
+		var form = new formBuilder(device);
+		document.getElementById("deviceDetails").innerHTML = "";
+		form.createForm("deviceDetails");
+	}
+}
+
+function showTicket(ticket)
+{
+	return function()
+	{
+		var form = new formBuilder(ticket);
+		var myNode = document.getElementById("dialogDiv");
+		while (myNode.firstChild) {
+			myNode.removeChild(myNode.firstChild);
+		}
+		//form.createForm("dialogDiv");
+		document.getElementById("dialogDiv").appendChild(tickets.draw(null,"popUp",ticket));
+		jQuery("#dialogDiv").dialog({
+		width:650,
+		height:550
+		});
+	}
+}
+document.addEventListener("DOMContentLoaded",ticketTest);
+wsTest.onopen = wsTestFunc;
+function wsTestFunc()
+{
+	var json = {
+		sender : "client",
+		action: "echo",
+		args: "hello world"
+	}
+	wsTest.send(JSON.stringify(json));
+}
+
+function showCreateTicket()
+{
+	document.getElementById("tickCreateUser").value = "";
+	document.getElementById("tickCreateSubject").value = "";
+	document.getElementById("tickCreateNotes").value = "";
+	jQuery("#createTicket").dialog({
+		width:550,
+		height:600
+		});
+	jQuery("#tickCreateUser").select2({
+		  data: Object.keys(userList)
+		});
+		
+}
+
+function createTicket()
+{
+	var json =
+	{
+		userID:userList[jQuery("#tickCreateUser").val()].id,
+		subject:document.getElementById("tickCreateSubject").value,
+		type:parseInt(document.getElementById("newTickType").value),
+		office:adminInfo.officeID,
+		notes:document.getElementById("tickCreateNotes").value,
+		agent:adminInfo.ID,
+		assign:parseInt(document.getElementById("newTickAssign").value),
+		priority:0,
+		account:userList[jQuery("#tickCreateUser").val()].account
+	};
+	var func = function(data)
+	{
+		jQuery("#createTicket").dialog('close');
+	};
+	var to = "http://localhost:9000/createTicket";
+	runJSONAjax(to,json,func);
+}
+//ticketTest();
+</script>
+<style>
+#dialogInfo > label
+{
+	display:inline-block;
+	width:25%;
+}
+#dialogInfo > span
+{
+	display:inline-block;
+	width:70%;
+}
+.ticketOuter{
+	border:1px solid black;
+	border-top:0px;
+	min-height:27px;
+	vertical-align:middle;
+}
+.innerTicket,.innerTicketHeader{
+	display:inline-block;
+	width:18%;
+	vertical-align:middle;
+}
+.innerTicketHeader
+{
+	background-color:black;
+	color:white;
+}
+.status,.device
+{
+	width:5%;
+	text-align:center;
+}
+.id
+{
+	width:4%;
+	text-align:center;
+}
+#dialogDiv > label,#deviceDetails > label
+{
+	width:29%;
+}
+#dialogDiv > input, #deviceDetails > input
+{
+	width:70%;
+}
+#deviceDetails
+{
+padding:10px;
+}
+.outerTableLayer
+{
+	min-height:450px;
+}
+.paginator
+{
+	margin:5px 100px;;
+}
+.paginatorPage
+{
+	padding:5px;
+	font-size:1.5em;
+	font-weight:bold;
+	margin:10px;
+	border:1px solid slategrey;
+}
+.paginatorPage:hover
+{
+	color:white;
+	background-color:black;
+}
+.elevated{
+	background-color:	#FFFF99;
+}
+.emergency{
+	background-color:	#FFCCCC;
+}
+#dialogNotes > textarea
+{
+	width:100%;
+	min-height:220px;
+}
+.btn
+{
+	margin:10px 15px;
+}
+#tickCreateNotes
+{
+	min-height:300px;
+}
+#createTicket > label
+{
+	width:35%;
+}
+#newTickAssign,#newTickType,#newOfficeAssignment
+{
+	width:63%;
+}
+</style>
+</head>
+<body>
+<button class = "btn" onclick = "showCreateTicket();">Create Ticket</button><span id = "Greeting"></span>
+<div class="ticketOuterHeader"><span class="innerTicketHeader time" onclick = "sortTicketTableBy('Time');">Time</span><span class="innerTicketHeader custName" onclick = "sortTicketTableBy('Last Name','name');">Name</span><span class="innerTicketHeader description" onclick = "sortTicketTableBy('Description');">Description</span><span class="innerTicketHeader action" onclick = "sortTicketTableBy('Action');">Action</span><span class="innerTicketHeader assignment" onclick = "sortTicketTableBy('Assigned To');">Assigned To</span><span class="innerTicketHeader status" onclick = "sortTicketTableBy('Status','number');">Status</span><span class="innerTicketHeader device" onclick = "sortTicketTableBy('Device','number');">Device</span></div>
+<div id = "table">
+</div>
+<div id = "dialogDiv" style = "display:none"></div>
+<div id = "createTicket" style = "display:none">
+<select id = "tickCreateUser" class = "form-control" placeholder = "User"></select>
+<input id = "tickCreateSubject" class = "form-control" placeholder = "Subject">
+<label> Notes </label>
+<textarea id = "tickCreateNotes" class = "form-control" placeholder = "Notes"></textarea>
+<!--<button class = "btn btn-primary" onclick = "createTicketJSON();">Create Ticket</button>-->
+</div>
+</body>
+</html>

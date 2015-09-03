@@ -72,6 +72,16 @@ function getUrlVars() {
     });
     return vars;
 }
+
+function checkSubmit(event)
+{
+	event = event || window.event;
+	//console.log(event.keyCode);
+	if(event.keyCode == 13)
+	{
+		doLogin();
+	}
+}
 </script>
 <style>
 body{
@@ -95,7 +105,7 @@ background-color:#FF9999;
 <div id = "wrapper">
 <input type = "text" id = "username" class="form-control" placeholder = "User Name"/>
 <br>
-<input type = "password" id = "pwd" placeholder = "Password" class="form-control"/>
+<input type = "password" id = "pwd" placeholder = "Password" class="form-control" onkeydown = "checkSubmit();"/>
 <br>
 <button onclick = "doLogin();" class="btn btn-primary">Log In</button>
 <div id = "result"></div>

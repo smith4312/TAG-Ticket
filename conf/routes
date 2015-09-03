@@ -7,17 +7,29 @@ GET     /                           controllers.Application.index
 
 GET     /agents                     controllers.Application.listAgents
 
+GET     /offices                    controllers.Application.listOffices
+
 GET     /tickets                    controllers.Application.listTickets
 
 GET     /ticketTypes                controllers.Application.getTicketTypes
+
 GET     /statusTypes                controllers.Application.getTicketStatusTypes
 
+GET     /wsTest                     controllers.Application.socket
 
-GET     /test1                      controllers.Application.test1
+GET     /wsTester                   controllers.Application.wsTester
 
-GET     /test2                      controllers.Application.test2
+GET     /getSortedUsers             controllers.Application.getAllSortedUsers
+
+GET     /getAdminInfo               controllers.Application.getAdminInfo
 
 POST    /loginService               controllers.Application.loginFunction
+
+POST    /updateTickInfo                controllers.Application.updateTickInfo
+
+POST    /createTicket               controllers.Application.createTicket
+
+POST    /getPersonalDevices         controllers.Application.listPersonsDevices
 # Map static resources from the /public folder to the /assets URL path
 GET     /*file               controllers.Assets.at(path="/public", file)
 
