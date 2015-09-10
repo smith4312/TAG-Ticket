@@ -1,4 +1,5 @@
-name := """play-scala"""
+organization in ThisBuild := "org.taghelpline"
+name := """tag-support-tickets"""
 
 version := "1.0-SNAPSHOT"
 
