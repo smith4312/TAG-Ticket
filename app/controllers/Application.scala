@@ -1,6 +1,6 @@
 package controllers
 
-import java.sql.{Statement, ResultSet}
+import java.sql.{PreparedStatement, Statement, ResultSet}
 import java.util
 import java.util.Date
 
@@ -136,26 +136,13 @@ class Application(dbConfig: backend.DatabaseConfig[PostgresDriver]) extends Cont
   }
 
   def queryToJson(query: String, rsToJsRow: ResultSet => JsValue): JsArray = {
-    var jsonBuffer = ArrayBuffer.empty[JsValue]
     val sess = dbConfig.db.createSession()
-    try {
-      val stmt = sess.conn.createStatement
-      val rs = stmt.executeQuery(query)
-      while (rs.next()) {
-        try {
-          jsonBuffer += rsToJsRow(rs)
-        }
-        catch{
-          case e:Exception => println(e.getMessage)
-        }
+    try
+      sess.withPreparedStatement(query) { pstmt =>
+        queryToJson(pstmt, rsToJsRow)
       }
-      rs.close()
-      stmt.close()
-    }
-    finally {
+    finally
       sess.close()
-    }
-    JsArray(jsonBuffer)
   }
 
   /*
@@ -225,40 +212,41 @@ class Application(dbConfig: backend.DatabaseConfig[PostgresDriver]) extends Cont
   def getTicketWithWhere(whereClause:String,vals:Seq[Object]) : JsArray = {
     val sess = dbConfig.db.createSession()
     var query = vTicketBase+whereClause;
-    var pstmt: java.sql.PreparedStatement = sess.prepareStatement(query);
-    if(vals != null)
-    {
-      for((v, i) <- vals.zipWithIndex) {
-        pstmt.setObject(i+1,v);
+    val json = try {
+      sess.withPreparedStatement(query) { pstmt =>
+        if (vals != null) {
+          for ((v, i) <- vals.zipWithIndex) {
+            pstmt.setObject(i + 1, v);
+          }
+        }
+        queryToJson(pstmt, (rs: ResultSet) =>
+          Json.obj(
+            "ticket_id" -> rs.getInt("TICKET_ID"),
+            "version" -> rs.getInt("VERSION"),
+            "Action" -> rs.getString("ACTION"),
+            "Description" -> rs.getString("DESCRIPTION"),
+            "Status" -> rs.getString("STATUS"),
+            "Account_id" -> rs.getInt("ACCOUNT_ID"),
+            "Person" -> rs.getInt("PERSON_ID"),
+            "First Name" -> rs.getString("FIRST_NAME"),
+            "Last Name" -> rs.getString("LAST_NAME"),
+            "Device_id" -> rs.getInt("PERSON_DEVICE_ID"),
+            "Device" -> rs.getString("DEVICE"),
+            "Office_id" -> rs.getInt("OFFICE_LOCATION_ID"),
+            "Office" -> rs.getString("LOCATION"),
+            "Created By" -> rs.getString("CREATED_BY"),
+            "Assigned To" -> rs.getString("ASSIGNED_TO"),
+            "Notes" -> rs.getString("NOTES"),
+            "Time" -> rs.getTimestamp("TIME"),
+            "Priority" -> rs.getInt("PRIORITY")
+          )
+        )
       }
-    }
-    val json = queryToJson(pstmt, (rs: ResultSet) =>
-      Json.obj(
-        "ticket_id" -> rs.getInt("TICKET_ID"),
-        "version" -> rs.getInt("VERSION"),
-        "Action" -> rs.getString("ACTION"),
-        "Description" -> rs.getString("DESCRIPTION"),
-        "Status"  -> rs.getString("STATUS"),
-        "Account_id" -> rs.getInt("ACCOUNT_ID"),
-        "Person" -> rs.getInt("PERSON_ID"),
-        "First Name" -> rs.getString("FIRST_NAME"),
-        "Last Name" -> rs.getString("LAST_NAME"),
-        "Device_id" -> rs.getInt("PERSON_DEVICE_ID"),
-        "Device" -> rs.getString("DEVICE"),
-        "Office_id" -> rs.getInt("OFFICE_LOCATION_ID"),
-        "Office" -> rs.getString("LOCATION"),
-        "Created By" -> rs.getString("CREATED_BY"),
-        "Assigned To" -> rs.getString("ASSIGNED_TO"),
-        "Notes" -> rs.getString("NOTES"),
-        "Time" -> rs.getTimestamp("TIME"),
-        "Priority" -> rs.getInt("PRIORITY")
-      )
-    )
-    dbCleanup(pstmt,sess);
+    } finally sess.close()
     return json;
   }
 
-    def getTicketById(tickID:Integer) : JsArray = {
+  def getTicketById(tickID:Integer) : JsArray = {
       val params: Seq[AnyRef] = Seq(tickID: AnyRef)
       getTicketWithWhere(" WHERE t.id = ?",params);
   }
@@ -293,50 +281,51 @@ class Application(dbConfig: backend.DatabaseConfig[PostgresDriver]) extends Cont
   /*
   Create the PreparedStatments for the different types of update types
    */
-  def setUpSQL(conn: JdbcBackend#Session, newField:String,newValue:String,tickID:Int) : java.sql.PreparedStatement= {
-    var pstmt: java.sql.PreparedStatement = null;
-    if(newField == "notes")
-    {
-      var query:String = "update ticket set notes = ?, time = time where id = ?";
-      pstmt = conn.prepareStatement(query);
-      pstmt.setString(1,newValue);
-      pstmt.setInt(2,tickID);
-    }
+  def setUpSQL[A](sess: JdbcBackend#Session, newField:String, newValue:String, tickID:Int)(error: => A)(f: PreparedStatement => A) : A = newField match {
+    case "notes" =>
+      val query: String = "update ticket set notes = ?, time = time where id = ?";
+      sess.withPreparedStatement(query) { pstmt =>
+        pstmt.setString(1, newValue);
+        pstmt.setInt(2, tickID);
+        f(pstmt)
+      }
 
-    if(newField == "assignment")
-    {
-      var query:String = "update ticket set assigned_agent_id = ?, time = time where id = ?";
-      pstmt = conn.prepareStatement(query);
-      if(newValue.toInt >= 0) {
+    case "assignment" =>
+      val query: String = "update ticket set assigned_agent_id = ?, time = time where id = ?";
+      sess.withPreparedStatement(query) { pstmt =>
+        if (newValue.toInt >= 0) {
+          pstmt.setInt(1, newValue.toInt);
+        }
+        else {
+          pstmt.setNull(1, java.sql.Types.NULL);
+        }
+        pstmt.setInt(2, tickID);
+        f(pstmt)
+      }
+
+    case "status" =>
+      val query: String = "update ticket set status_id = ?, time = time where id = ?";
+      sess.withPreparedStatement(query) { pstmt =>
         pstmt.setInt(1, newValue.toInt);
+        pstmt.setInt(2, tickID);
+        f(pstmt)
       }
-      else
-      {
-        pstmt.setNull(1,java.sql.Types.NULL);
+
+    case "office" =>
+      val query: String = "update ticket set office_location = ?, time = time where id = ?";
+      sess.withPreparedStatement(query) { pstmt =>
+        pstmt.setInt(1, newValue.toInt);
+        pstmt.setInt(2, tickID);
+        pstmt.setInt(2, tickID);
+        f(pstmt)
       }
-      pstmt.setInt(2,tickID);
-    }
 
-    if(newField == "status")
-    {
-      var query:String = "update ticket set status_id = ?, time = time where id = ?";
-      pstmt = conn.prepareStatement(query);
-      pstmt.setInt(1,newValue.toInt);
-      pstmt.setInt(2,tickID);
-    }
-
-    if(newField == "office")
-    {
-      var query:String = "update ticket set office_location = ?, time = time where id = ?";
-      pstmt = conn.prepareStatement(query);
-      pstmt.setInt(1,newValue.toInt);
-      pstmt.setInt(2,tickID);
-    }
-    return pstmt;
+    case _ =>
+      error
   }
+
   /*
   Generic service for updating tickets
-
    */
   def updateTickInfo = LoggedInAction(parse.json) { request =>
     val json = request.body;
@@ -344,33 +333,31 @@ class Application(dbConfig: backend.DatabaseConfig[PostgresDriver]) extends Cont
     val newInfo = (json \ "newInfo").as[String];
     val newField = (json \ "newField").as[String];
     var sess = dbConfig.db.createSession();
-    var pstmt: java.sql.PreparedStatement= setUpSQL(sess, newField,newInfo,tickID);
-    if(pstmt == null)
-    {
-      Ok(Json.obj(
-        "result" -> "invalid info"
-      ))
-    }
-
-    var updated:Int = 0;
-    try{
-      updated = pstmt.executeUpdate();
-    }
-    finally{
-      dbCleanup(pstmt, sess);
-    }
-    if(updated > 0)
-    {
-      var json = getTicketById(tickID);
-      updateExtras(json,"",tickID);
-      Ok(Json.obj(
-        "result" -> "updated"
-      ))
-    }
-    dbCleanup(null,sess);
-    Ok(Json.obj(
-    "result" -> "error"
-    ))
+    try {
+      setUpSQL(sess, newField, newInfo, tickID)(
+        Ok(Json.obj(
+          "result" -> "invalid info"
+        ))
+      ) { pstmt =>
+        var updated: Int = 0;
+        try {
+          updated = pstmt.executeUpdate();
+        }
+        finally {
+          dbCleanup(pstmt, sess);
+        }
+        if (updated > 0) {
+          var json = getTicketById(tickID);
+          updateExtras(json, "", tickID);
+          Ok(Json.obj(
+            "result" -> "updated"
+          ))
+        }
+        Ok(Json.obj(
+          "result" -> "error"
+        ))
+      }
+    } finally sess.close()
   }
 
   def getAdminInfo = LoggedInAction{request =>
@@ -398,55 +385,51 @@ class Application(dbConfig: backend.DatabaseConfig[PostgresDriver]) extends Cont
     val assign = (json \ "assign").as[Int];
     val priority = (json \ "priority").as[Int];
     val account = (json \ "account").as[Int];
-    var pstmt:java.sql.PreparedStatement = null;
-    var success:Boolean = false;
     val query:String = "Insert Into ticket (person_id,description,action_id,office_location_id,notes,created_agent_id,assigned_agent_id,priority,account_id,version,status_id,time) VALUES (?,?,?,?,?,?,?,?,?,1,1,?);";
     var sess = dbConfig.db.createSession();
-    try{
-      pstmt = sess.conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS);
-      pstmt.setInt(1,userID);
-      pstmt.setString(2,description);
-      pstmt.setInt(3,tickType);
-      pstmt.setInt(4,office);
-      pstmt.setString(5,notes);
-      pstmt.setInt(6,agent);
-      if(assign >= 0)
-      {
-        pstmt.setInt(7,assign);
+    try {
+      sess.withPreparedInsertStatement(query, Array(1)) { pstmt =>
+        pstmt.setInt(1,userID);
+        pstmt.setString(2,description);
+        pstmt.setInt(3,tickType);
+        pstmt.setInt(4,office);
+        pstmt.setString(5,notes);
+        pstmt.setInt(6,agent);
+        if(assign >= 0)
+        {
+          pstmt.setInt(7,assign);
+        }
+        else
+        {
+          pstmt.setNull(7,java.sql.Types.NULL);
+        }
+        pstmt.setInt(8,priority);
+        pstmt.setInt(9,account);
+        pstmt.setTimestamp(10,new java.sql.Timestamp(new Date().getTime))
+        var result = pstmt.executeUpdate();
+        var keys = pstmt.getGeneratedKeys();
+        keys.next();
+        var key = keys.getInt(1);
+        if(result > 0)
+        {
+          var json = getTicketById(key);
+          updateExtras(json,"created TickID: "+key,key);
+          Ok(Json.obj(
+            "result" -> "ticket created"
+          ))
+        } else {
+          Ok(Json.obj(
+            "result" -> "Error creating ticket"
+          ))
+        }
       }
-      else
-      {
-        pstmt.setNull(7,java.sql.Types.NULL);
-      }
-      pstmt.setInt(8,priority);
-      pstmt.setInt(9,account);
-      pstmt.setTimestamp(10,new java.sql.Timestamp(new Date().getTime))
-      var result = pstmt.executeUpdate();
-      var keys = pstmt.getGeneratedKeys();
-      keys.next();
-      var key = keys.getInt(1);
-      if(result > 0)
-      {
-        success = true;
-        var json = getTicketById(key);
-        updateExtras(json,"created TickID: "+key,key);
-      }
-    }
-    catch{
-      case e:Exception => println(e.getMessage());
-    }
-    finally{
-      dbCleanup(pstmt, sess);
-    }
-    if(success)
-    {
-      Ok(Json.obj(
-        "result" -> "ticket created"
-      ))
-    }
-    Ok(Json.obj(
-      "result" -> "Error creating ticket"
-    ))
+    } catch {
+      case e:Exception =>
+        println(e.getMessage);
+        Ok(Json.obj(
+          "result" -> s"Exception creating ticket: ${e.getMessage}"
+        ))
+    } finally sess.close()
   }
 
   def listPersonsDevices = LoggedInAction(parse.json) { request =>
@@ -455,36 +438,29 @@ class Application(dbConfig: backend.DatabaseConfig[PostgresDriver]) extends Cont
     var sess = dbConfig.db.createSession();
     var query:String = "Select filter_user_name,filter_password,p.notes as notes,provider,url,f.notes as filterNotes,device_type,manufacturer,model,os,browser,d.notes as deviceNotes  from   person_device p inner join device d on p.device_id = d.id\n   inner join filter f on p.filter_id = f.id  WHERE person_id = ?";
     val outputJSON = try {
-      var pstmt: java.sql.PreparedStatement = sess.prepareStatement(query);
-      pstmt.setInt(1, deviceID);
-      val ret = queryToJson(pstmt, (rs: ResultSet) =>
-        Json.obj(
-          "filterUsername" -> rs.getString("filter_user_name"),
-          "filterPassword" -> rs.getString("filter_password"),
-          "notes" -> rs.getString("notes"),
-          "filterProvider" -> rs.getString("provider"),
-          "filterURL" -> rs.getString("url"),
-          "filterNotes" -> rs.getString("filterNotes"),
-          "deviceType" -> rs.getString("device_type"),
-          "deviceManufacturer" -> rs.getString("manufacturer"),
-          "deviceModel" -> rs.getString("model"),
-          "os" -> rs.getString("os"),
-          "browser" -> rs.getString("browser"),
-          "deviceNotes" -> rs.getString("deviceNotes")
+      sess.withPreparedStatement(query) { pstmt =>
+        pstmt.setInt(1, deviceID);
+        queryToJson(pstmt, (rs: ResultSet) =>
+          Json.obj(
+            "filterUsername" -> rs.getString("filter_user_name"),
+            "filterPassword" -> rs.getString("filter_password"),
+            "notes" -> rs.getString("notes"),
+            "filterProvider" -> rs.getString("provider"),
+            "filterURL" -> rs.getString("url"),
+            "filterNotes" -> rs.getString("filterNotes"),
+            "deviceType" -> rs.getString("device_type"),
+            "deviceManufacturer" -> rs.getString("manufacturer"),
+            "deviceModel" -> rs.getString("model"),
+            "os" -> rs.getString("os"),
+            "browser" -> rs.getString("browser"),
+            "deviceNotes" -> rs.getString("deviceNotes")
+          )
         )
-      )
-      if(!pstmt.isClosed())
-      {
-        pstmt.close();
       }
-      ret
     }
     finally
-    {
       sess.close()
-    }
     Ok(outputJSON)
-
 }
 
 

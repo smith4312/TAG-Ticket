@@ -77,43 +77,37 @@ object UserRepository {
 
     //Lets check the user is allowed to log in against the DB
     val sess = dbConfig.db.createSession()
-    var pstmt: java.sql.PreparedStatement = null;
     var rs: java.sql.ResultSet = null;
     var newCookie: String = "Not Allowed";
+    val query: String = "Select id,access_level,last_name,first_name,office_location_id from agent where user_name = ? AND password = ?";
     try {
-      var query: String = "Select id,access_level,last_name,first_name,office_location_id from agent where user_name = ? AND password = ?";
-      pstmt = sess.prepareStatement(query);
-      pstmt.setString(1, user);
-      pstmt.setString(2, password);
-      rs = pstmt.executeQuery();
-      if (rs.next()) {
-        //If the user has logged in previously update his info and set a new cookie
-        if (users.containsKey(user)) {
-          val oldUser: AdminUser = users.get(user);
-          oldUser.password = password;
-          oldUser.accessLevel = rs.getString("access_level");
-          oldUser.fullName = rs.getString("first_name") + " " + rs.getString("last_name");
-          oldUser.officeID = rs.getInt("office_location_id");
-          oldUser.ID = rs.getInt("id");
-          newCookie = oldUser.addCookie();
-        }
-        //Otherwise add his info to the repository
-        else {
-          val newUser: AdminUser = new AdminUser(user, password, rs.getString("first_name") + " " + rs.getString("last_name"), rs.getString("access_level"),rs.getInt("office_location_id"),rs.getInt("id"));
-          users.put(user, newUser);
-          newCookie = newUser.addCookie();
+      sess.withPreparedStatement(query) { pstmt =>
+        pstmt.setString(1, user);
+        pstmt.setString(2, password);
+
+        val rs = pstmt.executeQuery();
+        if (rs.next()) {
+          //If the user has logged in previously update his info and set a new cookie
+          if (users.containsKey(user)) {
+            val oldUser: AdminUser = users.get(user);
+            oldUser.password = password;
+            oldUser.accessLevel = rs.getString("access_level");
+            oldUser.fullName = rs.getString("first_name") + " " + rs.getString("last_name");
+            oldUser.officeID = rs.getInt("office_location_id");
+            oldUser.ID = rs.getInt("id");
+            newCookie = oldUser.addCookie();
+          }
+          //Otherwise add his info to the repository
+          else {
+            val newUser: AdminUser = new AdminUser(user, password, rs.getString("first_name") + " " + rs.getString("last_name"), rs.getString("access_level"),rs.getInt("office_location_id"),rs.getInt("id"));
+            users.put(user, newUser);
+            newCookie = newUser.addCookie();
+          }
         }
       }
     }
     finally {
       sess.close()
-      if (pstmt != null && !pstmt.isClosed()) {
-        pstmt.close();
-      }
-      if (rs != null && !rs.isClosed()) {
-        rs.close();
-      }
-
     }
     return user + ":" + newCookie;
   }
