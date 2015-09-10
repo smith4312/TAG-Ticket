@@ -1,19 +1,21 @@
 package controllers
 
+import java.sql.{Statement, ResultSet}
 import java.util
 import java.util.Date
-import java.sql.{Timestamp, ResultSet, Statement}
-import play.api.Play.current
-import play.api._
-import play.api.libs.json.Json.JsValueWrapper
-import play.api.mvc._
-import play.api.db._
+
+import akka.actor.{Props, ActorRef, Actor}
 import play.api.libs.json._
-import akka.actor._
-import scala.collection.JavaConversions._
+import play.api.mvc._
+import play.api.Play.current
+import slick.backend
+import slick.driver.PostgresDriver
+import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConversions._
 import scala.concurrent.Future
+
 
 /*
 Create an action that authenticates the user before allowing login
@@ -60,7 +62,7 @@ object LoggedInAction extends ActionBuilder[Request] {
 }
 
 
-class Application extends Controller {
+class Application(dbConfig: backend.DatabaseConfig[PostgresDriver]) extends Controller {
   //An easy replacement where I need to mimic v_ticket view
   var vTicketBase:String =
     """SELECT t.id AS "TICKET_ID",
@@ -107,7 +109,7 @@ class Application extends Controller {
         val user = (json \ "username").as[String];
         val pwd = (json \ "password").as[String];
         //Try to login and generate a new login cookie
-        val newCookie = UserRepository.logIn(user, pwd);
+        val newCookie = UserRepository.logIn(user, pwd)(dbConfig);
         //If login failed it would generate this so respond accordingly
         if (newCookie.contains("Not Allowed")) {
           Ok(Json.obj(
@@ -135,9 +137,9 @@ class Application extends Controller {
 
   def queryToJson(query: String, rsToJsRow: ResultSet => JsValue): JsArray = {
     var jsonBuffer = ArrayBuffer.empty[JsValue]
-    val conn = DB.getConnection()
+    val sess = dbConfig.db.createSession()
     try {
-      val stmt = conn.createStatement
+      val stmt = sess.conn.createStatement
       val rs = stmt.executeQuery(query)
       while (rs.next()) {
         try {
@@ -151,7 +153,7 @@ class Application extends Controller {
       stmt.close()
     }
     finally {
-      conn.close()
+      sess.close()
     }
     JsArray(jsonBuffer)
   }
@@ -160,24 +162,19 @@ class Application extends Controller {
   Same as above but with Prepared Statements to prevent SQL Injection
   The connection is needed to generate the PreparedStatement so can't be closed here as it needs to be passed in
    */
-  def queryToJson(query: java.sql.PreparedStatement,conn: java.sql.Connection, rsToJsRow: ResultSet => JsValue): JsArray = {
+  def queryToJson(query: java.sql.PreparedStatement, rsToJsRow: ResultSet => JsValue): JsArray = {
     var jsonBuffer = ArrayBuffer.empty[JsValue];
-    try {
-      val rs = query.executeQuery();
-      while (rs.next()) {
-        try {
-          jsonBuffer += rsToJsRow(rs)
-        }
-        catch{
-          case e:Exception => println(e.getMessage)
-        }
+    val rs = query.executeQuery();
+    while (rs.next()) {
+      try {
+        jsonBuffer += rsToJsRow(rs)
       }
-      if(!rs.isClosed()) {
-        rs.close();
+      catch{
+        case e:Exception => println(e.getMessage)
       }
     }
-    finally {
-
+    if(!rs.isClosed()) {
+      rs.close();
     }
     JsArray(jsonBuffer)
   }
@@ -226,16 +223,16 @@ class Application extends Controller {
   }
 
   def getTicketWithWhere(whereClause:String,vals:Seq[Object]) : JsArray = {
-    val conn:java.sql.Connection = DB.getConnection();
+    val sess = dbConfig.db.createSession()
     var query = vTicketBase+whereClause;
-    var pstmt: java.sql.PreparedStatement = conn.prepareStatement(query);
+    var pstmt: java.sql.PreparedStatement = sess.prepareStatement(query);
     if(vals != null)
     {
       for((v, i) <- vals.zipWithIndex) {
         pstmt.setObject(i+1,v);
       }
     }
-    val json = queryToJson(pstmt, conn, (rs: ResultSet) =>
+    val json = queryToJson(pstmt, (rs: ResultSet) =>
       Json.obj(
         "ticket_id" -> rs.getInt("TICKET_ID"),
         "version" -> rs.getInt("VERSION"),
@@ -257,7 +254,7 @@ class Application extends Controller {
         "Priority" -> rs.getInt("PRIORITY")
       )
     )
-    dbCleanup(pstmt,conn);
+    dbCleanup(pstmt,sess);
     return json;
   }
 
@@ -267,16 +264,13 @@ class Application extends Controller {
   }
 
   //check and close if open DB relevant items
-  def dbCleanup(pstmt:java.sql.PreparedStatement,conn:java.sql.Connection) =
+  def dbCleanup(pstmt:java.sql.PreparedStatement, sess: JdbcBackend#Session) =
   {
     if(pstmt != null && !pstmt.isClosed)
     {
       pstmt.close()
     }
-    if(conn != null && !conn.isClosed)
-    {
-      conn.close()
-    }
+    sess.close()
   }
 
   /*
@@ -299,7 +293,7 @@ class Application extends Controller {
   /*
   Create the PreparedStatments for the different types of update types
    */
-  def setUpSQL(conn:java.sql.Connection,newField:String,newValue:String,tickID:Int) : java.sql.PreparedStatement= {
+  def setUpSQL(conn: JdbcBackend#Session, newField:String,newValue:String,tickID:Int) : java.sql.PreparedStatement= {
     var pstmt: java.sql.PreparedStatement = null;
     if(newField == "notes")
     {
@@ -349,8 +343,8 @@ class Application extends Controller {
     val tickID = (json \ "tickID").as[Int];
     val newInfo = (json \ "newInfo").as[String];
     val newField = (json \ "newField").as[String];
-    var conn = DB.getConnection();
-    var pstmt: java.sql.PreparedStatement= setUpSQL(conn,newField,newInfo,tickID);
+    var sess = dbConfig.db.createSession();
+    var pstmt: java.sql.PreparedStatement= setUpSQL(sess, newField,newInfo,tickID);
     if(pstmt == null)
     {
       Ok(Json.obj(
@@ -363,7 +357,7 @@ class Application extends Controller {
       updated = pstmt.executeUpdate();
     }
     finally{
-      dbCleanup(pstmt,conn);
+      dbCleanup(pstmt, sess);
     }
     if(updated > 0)
     {
@@ -373,7 +367,7 @@ class Application extends Controller {
         "result" -> "updated"
       ))
     }
-    dbCleanup(null,conn);
+    dbCleanup(null,sess);
     Ok(Json.obj(
     "result" -> "error"
     ))
@@ -407,9 +401,9 @@ class Application extends Controller {
     var pstmt:java.sql.PreparedStatement = null;
     var success:Boolean = false;
     val query:String = "Insert Into ticket (person_id,description,action_id,office_location_id,notes,created_agent_id,assigned_agent_id,priority,account_id,version,status_id,time) VALUES (?,?,?,?,?,?,?,?,?,1,1,?);";
-    var conn = DB.getConnection();
+    var sess = dbConfig.db.createSession();
     try{
-      pstmt = conn.prepareStatement(query,Statement.RETURN_GENERATED_KEYS);
+      pstmt = sess.conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS);
       pstmt.setInt(1,userID);
       pstmt.setString(2,description);
       pstmt.setInt(3,tickType);
@@ -442,7 +436,7 @@ class Application extends Controller {
       case e:Exception => println(e.getMessage());
     }
     finally{
-      dbCleanup(pstmt,conn);
+      dbCleanup(pstmt, sess);
     }
     if(success)
     {
@@ -458,12 +452,12 @@ class Application extends Controller {
   def listPersonsDevices = LoggedInAction(parse.json) { request =>
       val json = request.body;
         val deviceID = (json \ "id").as[Int];
-    var conn = DB.getConnection();
+    var sess = dbConfig.db.createSession();
     var query:String = "Select filter_user_name,filter_password,p.notes as notes,provider,url,f.notes as filterNotes,device_type,manufacturer,model,os,browser,d.notes as deviceNotes  from   person_device p inner join device d on p.device_id = d.id\n   inner join filter f on p.filter_id = f.id  WHERE person_id = ?";
     val outputJSON = try {
-      var pstmt: java.sql.PreparedStatement = conn.prepareStatement(query);
+      var pstmt: java.sql.PreparedStatement = sess.prepareStatement(query);
       pstmt.setInt(1, deviceID);
-      val ret = queryToJson(pstmt, conn, (rs: ResultSet) =>
+      val ret = queryToJson(pstmt, (rs: ResultSet) =>
         Json.obj(
           "filterUsername" -> rs.getString("filter_user_name"),
           "filterPassword" -> rs.getString("filter_password"),
@@ -487,12 +481,9 @@ class Application extends Controller {
     }
     finally
     {
-      if(!conn.isClosed())
-      {
-        conn.close();
-      }
-}
-Ok(outputJSON)
+      sess.close()
+    }
+    Ok(outputJSON)
 
 }
 

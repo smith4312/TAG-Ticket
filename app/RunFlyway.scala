@@ -6,11 +6,11 @@ import scala.io.StdIn
 
 object RunFlyway {
   lazy val config = ConfigFactory.load
-  lazy val dbUrl = config.getString("db.default.url")
+  lazy val dbUrl = config.getString("slick.dbs.default.db.url")
   lazy val flyway = {
     val fw = new Flyway
-    val user = config.getString("db.default.username")
-    val pw = config.getString("db.default.password")
+    val user = config.getString("slick.dbs.default.db.user")
+    val pw = config.getString("slick.dbs.default.db.password")
     fw.setDataSource(dbUrl, user, pw)
     fw.setBaselineOnMigrate(true)
     fw.setBaselineVersion(MigrationVersion.fromVersion("0"))
